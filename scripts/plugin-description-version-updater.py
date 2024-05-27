@@ -47,7 +47,9 @@ def validate_version(version: str) -> None:
         raise Exception("Invalid version format.")
 
 
-def main(filename: str, version: str, write_data=True, skip_backup=False) -> None:
+def main(
+    filename: str, version: str, backup_suffix: str, write_data=True, skip_backup=False
+) -> None:
     # validate version
     validate_version(version)
 
@@ -165,8 +167,7 @@ def main(filename: str, version: str, write_data=True, skip_backup=False) -> Non
     if write_data:
         # make a backup of the plugin if not disabled
         if not skip_backup:
-            current_time = dt.now(tz=timezone.UTC)
-            backup_filename = f"{filename}.{current_time.strftime('%Y%m%dT%H%M%SZ')}.backup"
+            backup_filename = f"{filename}{backup_suffix}"
             print(f"Making backup of plugin at '{backup_filename}'...")
             shutil.copy2(filename, backup_filename)
 
@@ -211,6 +212,11 @@ if __name__ == "__main__":
         action="store_true",
         help="disables making a backup of the plugin before changing it",
     )
+    parser.add_argument(
+        "--backup-suffix",
+        default=f".{dt.now(tz=timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.backup",
+        help="the suffix to append to the backup filename; defaults to '.<timestamp>.backup'",
+    )
     args = parser.parse_args()
 
     err = False
@@ -232,7 +238,13 @@ if __name__ == "__main__":
                 else:
                     print("------------------------------")
 
-                main(file, args.version, not args.dry_run, args.skip_backup)
+                main(
+                    filename=file,
+                    version=args.version,
+                    backup_suffix=args.backup_suffix,
+                    write_data=(not args.dry_run),
+                    skip_backup=args.skip_backup,
+                )
             except Exception as e:
                 print(e)
                 err = True
