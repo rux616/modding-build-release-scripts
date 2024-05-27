@@ -16,6 +16,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 
+# convert markdown to plaintext
 
 [CmdletBinding()]
 param (
