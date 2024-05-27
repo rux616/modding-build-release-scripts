@@ -18,7 +18,7 @@
 
 # contains the version class
 
-# source the actual version info
+# source the actual version info - expects '.' to be the root of the project
 . "./.version.ps1"
 
 class Version {
