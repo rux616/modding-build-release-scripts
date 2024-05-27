@@ -40,7 +40,7 @@ function Get-StringHash([string] $content) {
 $ErrorActionPreference = "Stop"
 
 # source version class
-. "./support/scripts/version-class.ps1"
+. (Join-Path $PSScriptRoot "version-class.ps1")
 
 # update build number
 $version.IncrementBuild()
@@ -79,6 +79,6 @@ $text_files | ForEach-Object {
     "------------------------------"
 }
 
-$plugin_description_version_updater = $PSScriptRoot + "\plugin-description-version-updater.py"
+$plugin_description_version_updater = Join-Path $PSScriptRoot "plugin-description-version-updater.py"
 # python3 needs to be accessible from PATH!
 python3.exe $plugin_description_version_updater $(if ($SkipBackup) { "--skip-backup" }) "$version" $PluginFiles
