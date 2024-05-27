@@ -39,7 +39,7 @@ function New-TemporaryDirectory {
 $ErrorActionPreference = "Stop"
 
 # source version class
-. "./support/scripts/version-class.ps1"
+. (Join-Path $PSScriptRoot "version-class.ps1")
 
 # archive type
 $archive_type = if ($Fallout4) { "fo4" } elseif ($Starfield) { "sf1" }
@@ -47,9 +47,12 @@ $archive_type_dds = if ($Fallout4) { "fo4dds" } elseif ($Starfield) { "sf1dds" }
 
 $ba2_base_name = if ($PluginName) { $PluginName } else { $ModName.Replace(" ", "") }
 $local_dir = Get-Location
-$build_dir = Join-Path $local_dir "/builds"
-$data_dir = Join-Path $local_dir "/data"
-$7z_file = $build_dir + "/" + $ModName.Replace(" ", "_") + "_v" + $version + ".7z"
+$build_dir = Join-Path $local_dir "builds"
+$data_dir = Join-Path $local_dir "data"
+$7z_file = Join-Path $build_dir ($ModName.Replace(" ", "_") + "_v" + $version + ".7z")
+
+$bsarch_exe = Join-Path $PSScriptRoot "..\bin\BSArch\BSArch64.exe"
+$7z_exe = Join-Path $PSScriptRoot "..\bin\7-Zip\7zr.exe"
 
 $temp_dir_general = New-TemporaryDirectory
 $temp_dir_textures = New-TemporaryDirectory
@@ -93,10 +96,10 @@ try {
     }
     # make general BA2
     If ($assets_found) {
-        ./support/bin/BSArch/BSArch.exe `
+        &$bsarch_exe `
             pack `
             "$temp_dir_general" `
-            "$data_dir/$ba2_base_name - Main.ba2" `
+            "$data_dir\$ba2_base_name - Main.ba2" `
             -$archive_type `
             "$(if ($assets_compressible) { "-z" } else {})" `
             -share `
@@ -118,10 +121,10 @@ try {
     }
     # make texture BA2
     if ($assets_found) {
-        ./support/bin/BSArch/BSArch.exe `
+        &$bsarch_exe `
             pack `
             "$temp_dir_general" `
-            "$data_dir/$ba2_base_name - Textures.ba2" `
+            "$data_dir\$ba2_base_name - Textures.ba2" `
             -$archive_type_dds `
             -z `
             -share `
@@ -143,12 +146,12 @@ try {
     # make 7z
     if (Test-Path $7z_file) { Remove-Item -Force $7z_file }
     if ($PutInDataSubdirectory) {
-        ./support/bin/7zip/7zr.exe a -t7z -mx9 $7z_file ./data -x@"$7z_exclude_file"
+        &$7z_exe a -t7z -mx9 $7z_file .\data -x@"$7z_exclude_file"
     }
     else {
         $working_dir = Get-Location
         Set-Location $data_dir
-        &"$working_dir/support/bin/7zip/7zr.exe" a -t7z -mx9 $7z_file . -x@"$7z_exclude_file"
+        &$7z_exe a -t7z -mx9 $7z_file . -x@"$7z_exclude_file"
         Set-Location $working_dir
     }
 }
@@ -157,5 +160,5 @@ finally {
     Write-Output "temp_dir_textures: $temp_dir_textures"
     Remove-Item -Force -Recurse -Path $temp_dir_general
     Remove-Item -Force -Recurse -Path $temp_dir_textures
-    Remove-Item -Force ($data_dir + "/*.ba2")
+    Remove-Item -Force (Join-Path $data_dir "*.ba2")
 }
