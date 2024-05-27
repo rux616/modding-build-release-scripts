@@ -20,18 +20,18 @@
 # note that file paths are relative to the root of the project
 
 $text_files.Add(@{
-        # .version.ps1
+        # .\.version.ps1
         # build_number = ...
-        file               = "./.version.ps1"
+        file               = ".\.version.ps1"
         search_and_replace = @(@{
                 search  = "(build_number = )\d*"
                 replace = "`${1}" + $version.BuildNumber.ToString()
             })
     })
 $text_files.Add(@{
-        # ./support/docs/README.md
+        # .\support\docs\README.md
         # Version: ...
-        file               = "./support/docs/README.md"
+        file               = ".\support\docs\README.md"
         search_and_replace = @(@{
                 search  = "(Version: ).*"
                 replace = "`${1}" + $version.ToString()
