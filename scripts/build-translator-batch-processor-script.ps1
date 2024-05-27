@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory, ValueFromRemainingArguments, ValueFromPipeline)]
-    [string[]] $Files
+    [string[]] $Files,
+    [string] $OutputFile = ".\support\scripts\xTranslator-BatchProcessor.txt"
 )
 
 begin {
@@ -16,10 +17,8 @@ begin {
         "ptbr"
         "zhhans"
     )
-    $file_out = Split-Path -Parent $($Global:MyInvocation.MyCommand.Definition)
-    $file_out = Join-Path $file_out "xTranslator-BatchProcessor.txt"
-    if (-not (Test-Path -LiteralPath $file_out)) { New-Item $file_out | Out-Null }
-    $file_out = Get-Item -LiteralPath $file_out
+    if (-not (Test-Path -LiteralPath $OutputFile)) { New-Item $OutputFile | Out-Null }
+    $file_out = Get-Item -LiteralPath $OutputFile
     $content = ""
 }
 
@@ -43,5 +42,8 @@ EndRule
 "
         }
     }
+}
+
+end {
     $content | Set-Content -LiteralPath $file_out -NoNewline
 }
