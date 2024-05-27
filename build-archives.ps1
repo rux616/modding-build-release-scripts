@@ -16,12 +16,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 
+# build archives
 
-[CmdletBinding()]
+# TODO fix paths to be relative to the script for everything included
+
 param (
     [Parameter(Mandatory)] [string] $ModName,
-    [Parameter()] [string] $PluginName,
-    [switch] $PutInDataSubdirectory
+    [string] $PluginName,
+    [switch] $PutInDataSubdirectory,
+    [Parameter(ParameterSetName = "Fallout 4", Mandatory)] [switch] $Fallout4,
+    [Parameter(ParameterSetName = "Starfield", Mandatory)] [switch] $Starfield
 )
 
 # https://stackoverflow.com/a/34559554
@@ -36,6 +40,10 @@ $ErrorActionPreference = "Stop"
 
 # source version class
 . "./support/scripts/version-class.ps1"
+
+# archive type
+$archive_type = if ($Fallout4) { "fo4" } elseif ($Starfield) { "sf1" }
+$archive_type_dds = if ($Fallout4) { "fo4dds" } elseif ($Starfield) { "sf1dds" }
 
 $ba2_base_name = if ($PluginName) { $PluginName } else { $ModName.Replace(" ", "") }
 $local_dir = Get-Location
@@ -89,7 +97,7 @@ try {
             pack `
             "$temp_dir_general" `
             "$data_dir/$ba2_base_name - Main.ba2" `
-            -sf1 `
+            -$archive_type `
             "$(if ($assets_compressible) { "-z" } else {})" `
             -share `
             -mt
@@ -114,7 +122,7 @@ try {
             pack `
             "$temp_dir_general" `
             "$data_dir/$ba2_base_name - Textures.ba2" `
-            -sf1dds `
+            -$archive_type_dds `
             -z `
             -share `
             -mt
