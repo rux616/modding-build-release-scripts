@@ -18,13 +18,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 
+# built-in
 import argparse
 import hashlib
 import re
 import shutil
 import struct
-from datetime import datetime
+from datetime import datetime as dt
+from datetime import timezone
 
+# constants
 SIG_LENGTH = 4
 UINT16_LENGTH = 2
 UINT32_LENGTH = 4
@@ -32,19 +35,19 @@ VERSION_CHECK = r"^v?\d+\.\d+\.\d+" + r"($|(-(pre|rc|beta|alpha)(\.\d+)?))" + r"
 VERSION_REGEX = r"v?\d+\.\d+\.\d+" + r"(-(pre|rc|beta|alpha)(\.\d+)?)?" + r"(\+\d+)?"
 
 
-def replace_data(data, start, stop, new_data):
+def replace_data(data: bytearray, start: int, stop: int, new_data: bytes) -> None:
     del data[start:stop]
     for byte in new_data:
         data.insert(start, byte)
         start += 1
 
 
-def validate_version(version):
+def validate_version(version: str) -> None:
     if re.search(VERSION_CHECK, version) is None:
         raise Exception("Invalid version format.")
 
 
-def main(filename, version, write_data=True, make_backup=True):
+def main(filename: str, version: str, write_data=True, make_backup=True) -> None:
     # validate version
     validate_version(version)
 
@@ -66,7 +69,8 @@ def main(filename, version, write_data=True, make_backup=True):
     tes4_offset = 0
     tes4_data_size_offset = tes4_offset + SIG_LENGTH
     tes4_data_offset = tes4_data_size_offset + UINT32_LENGTH
-    tes4_data_size = struct.unpack("I", plugin_data[tes4_data_size_offset:tes4_data_offset])[0]
+    # "I" is an unsigned int, which is 4 bytes
+    tes4_data_size: int = struct.unpack("I", plugin_data[tes4_data_size_offset:tes4_data_offset])[0]
 
     # do a limited verification of the file by seeing if it begins with b"TES4"
     if plugin_data[tes4_offset:tes4_data_size_offset] != b"TES4":
@@ -78,7 +82,8 @@ def main(filename, version, write_data=True, make_backup=True):
         raise Exception("CNAM record not found: Possible malformed TES4 record")
     cnam_data_size_offset = cnam_offset + SIG_LENGTH
     cnam_data_offset = cnam_data_size_offset + UINT16_LENGTH
-    cnam_data_size = struct.unpack("H", plugin_data[cnam_data_size_offset:cnam_data_offset])[0]
+    # "H" is an unsigned short, which is 2 bytes
+    cnam_data_size: int = struct.unpack("H", plugin_data[cnam_data_size_offset:cnam_data_offset])[0]
 
     # determine if SNAM record exists
     snam_offset = cnam_data_offset + cnam_data_size
@@ -93,8 +98,12 @@ def main(filename, version, write_data=True, make_backup=True):
     if not snam_needs_to_be_created:
         snam_data_size_offset = snam_offset + SIG_LENGTH
         snam_data_offset = snam_data_size_offset + UINT16_LENGTH
-        snam_data_size = struct.unpack("H", plugin_data[snam_data_size_offset:snam_data_offset])[0]
-        description = struct.unpack(
+        # "H" is an unsigned short, which is 2 bytes
+        snam_data_size: int = struct.unpack(
+            "H", plugin_data[snam_data_size_offset:snam_data_offset]
+        )[0]
+        # "s" is a char[], which is a string of bytes
+        description: str = struct.unpack(
             f"{snam_data_size}s",
             plugin_data[snam_data_offset : snam_data_offset + snam_data_size],
         )[0].decode("latin1")[:-1]
@@ -156,10 +165,10 @@ def main(filename, version, write_data=True, make_backup=True):
     if write_data:
         # make a backup of the plugin if not disabled
         if make_backup:
-            current_time = datetime.utcnow()
-            backup = f"{filename}.{current_time.strftime('%Y%m%dT%H%M%SZ')}.backup"
-            print(f"Making backup of plugin at '{backup}'...")
-            shutil.copy2(filename, backup)
+            current_time = dt.now(tz=timezone.UTC)
+            backup_filename = f"{filename}.{current_time.strftime('%Y%m%dT%H%M%SZ')}.backup"
+            print(f"Making backup of plugin at '{backup_filename}'...")
+            shutil.copy2(filename, backup_filename)
 
         # write the plugin data back to the file
         print("Writing modified data to disk...")
