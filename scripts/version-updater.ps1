@@ -80,5 +80,16 @@ $text_files | ForEach-Object {
 }
 
 $plugin_description_version_updater = Join-Path $PSScriptRoot "plugin-description-version-updater.py"
+$python_arguments = @(
+    $(if ($SkipBackup) { "--skip-backup" })
+    "--backup-suffix"
+    "$BackupSuffix"
+    "$version"
+    $PluginFiles
+)
 # python3 needs to be accessible from PATH!
-python3.exe $plugin_description_version_updater $(if ($SkipBackup) { "--skip-backup" }) "$version" $PluginFiles
+python3.exe "$plugin_description_version_updater" $python_arguments
+$python_exit_code = $LASTEXITCODE
+if ($python_exit_code -ne 0) {
+    throw "$plugin_description_version_updater failed. exit code: $python_exit_code"
+}
