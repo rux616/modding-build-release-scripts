@@ -47,7 +47,7 @@ def validate_version(version: str) -> None:
         raise Exception("Invalid version format.")
 
 
-def main(filename: str, version: str, write_data=True, make_backup=True) -> None:
+def main(filename: str, version: str, write_data=True, skip_backup=False) -> None:
     # validate version
     validate_version(version)
 
@@ -164,7 +164,7 @@ def main(filename: str, version: str, write_data=True, make_backup=True) -> None
     # write out the file if not doing a dry run
     if write_data:
         # make a backup of the plugin if not disabled
-        if make_backup:
+        if not skip_backup:
             current_time = dt.now(tz=timezone.UTC)
             backup_filename = f"{filename}.{current_time.strftime('%Y%m%dT%H%M%SZ')}.backup"
             print(f"Making backup of plugin at '{backup_filename}'...")
@@ -202,14 +202,12 @@ if __name__ == "__main__":
         help="The plugin file(s) to edit. Must be a file with extension '.esl', '.esm', or '.esp'.",
     )
     parser.add_argument(
-        "-d",
         "--dry-run",
         action="store_true",
         help="perform a dry run only; doesn't actually edit any plugins",
     )
     parser.add_argument(
-        "-n",
-        "--no-backup",
+        "--skip-backup",
         action="store_true",
         help="disables making a backup of the plugin before changing it",
     )
@@ -234,7 +232,7 @@ if __name__ == "__main__":
                 else:
                     print("------------------------------")
 
-                main(file, args.version, not args.dry_run, not args.no_backup)
+                main(file, args.version, not args.dry_run, args.skip_backup)
             except Exception as e:
                 print(e)
                 err = True
