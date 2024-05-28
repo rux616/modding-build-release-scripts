@@ -37,7 +37,7 @@ if (-not ($Fallout4 -xor $Starfield)) {
     throw "You must specify one of either Fallout 4 or Starfield as the game release."
 }
 
-$game_release = if ($Fallout4) { "Fallout 4" } elseif ($Starfield) { "Starfield" }
+$game_release = if ($Fallout4) { "Fallout4" } elseif ($Starfield) { "Starfield" }
 $output_format = if ($YAML) { "Spriggit.Yaml" } elseif ($JSON) { "Spriggit.Json" }
 
 # serialize each plugin individually
