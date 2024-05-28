@@ -21,7 +21,7 @@
 param (
     [string] $TextFileSchemaFile = ".\support\scripts\version-updater-text-file-schema.ps1",
     [string[]] $PluginFiles = (Get-ChildItem -Path ".\data\*" -Include "*.esl", "*.esm", "*.esp" -File),
-    [bool] $SkipBackup = $false,
+    [switch] $SkipBackup,
     [string] $BackupSuffix = ".$((Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmss\Z")).backup"
 )
 
