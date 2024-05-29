@@ -18,12 +18,13 @@
 
 # build archives
 
-# TODO fix paths to be relative to the script for everything included
-
 param (
     [Parameter(Mandatory)] [string] $ModName,
     [string] $PluginName,
     [switch] $PutInDataSubdirectory,
+    [switch] $IncludeBuildNumber,
+    [switch] $PutInVersionSubdirectory,
+    [string[]] $Exclude,
     [Parameter(ParameterSetName = "Fallout 4", Mandatory)] [switch] $Fallout4,
     [Parameter(ParameterSetName = "Starfield", Mandatory)] [switch] $Starfield
 )
@@ -40,6 +41,8 @@ $ErrorActionPreference = "Stop"
 
 # source version class
 . (Join-Path $PSScriptRoot "version-class.ps1")
+# if the build number is to be included in the version, mark it as such
+$version.IncludeBuildInVersionDefault = $IncludeBuildNumber
 
 # archive type
 $archive_type = if ($Fallout4) { "fo4" } elseif ($Starfield) { "sf1" }
@@ -47,16 +50,27 @@ $archive_type_dds = if ($Fallout4) { "fo4dds" } elseif ($Starfield) { "sf1dds" }
 
 $ba2_base_name = if ($PluginName) { $PluginName } else { $ModName.Replace(" ", "") }
 $local_dir = Get-Location
-$build_dir = Join-Path $local_dir "builds"
+$build_dir = Join-Path $local_dir "builds" $(if ($PutInVersionSubdirectory) { $version.ToString($false) })
 $data_dir = Join-Path $local_dir "data"
-$7z_file = Join-Path $build_dir ($ModName.Replace(" ", "_") + "_v" + $version + ".7z")
+$7z_file = Join-Path $build_dir ($ModName.Replace(" ", "_") + "-v" + $version + ".7z")
+
+if (-not (Test-Path $build_dir)) {
+    New-Item -ItemType Directory -Path $build_dir
+}
 
 $bsarch_exe = Join-Path $PSScriptRoot "..\bin\BSArch\BSArch64.exe"
 $7z_exe = Join-Path $PSScriptRoot "..\bin\7-Zip\7zr.exe"
 
 $temp_dir_general = New-TemporaryDirectory
 $temp_dir_textures = New-TemporaryDirectory
+$ba2_archives_to_remove = [System.Collections.Generic.List[string]]::new()
 try {
+    # excluded files
+    $excluded_files = @(
+        "*.psc"
+        "*.*sonnet"
+        "*.ppj"
+    ) + $Exclude
     # potential directories to put into general BA2s:
     $asset_dirs = @(
         "distantlod"
@@ -91,12 +105,18 @@ try {
             if ($non_compressible_asset_dirs -contains $_) {
                 $script:assets_compressible = $false
             }
-            Copy-Item -Recurse -Path $current_asset_dir $temp_dir_general
+            $copy_item_params = @{
+                Recurse     = $true
+                Path        = $current_asset_dir
+                Destination = $temp_dir_general
+                Exclude     = $excluded_files
+            }
+            Copy-Item @copy_item_params
         }
     }
     # make general BA2
     If ($assets_found) {
-        &$bsarch_exe `
+        & $bsarch_exe `
             pack `
             "$temp_dir_general" `
             "$data_dir\$ba2_base_name - Main.ba2" `
@@ -104,6 +124,7 @@ try {
             "$(if ($assets_compressible) { "-z" } else {})" `
             -share `
             -mt
+        $ba2_archives_to_remove.Add("$data_dir\$ba2_base_name - Main.ba2")
     }
 
     # potential directories to put into texture BA2s:
@@ -116,23 +137,30 @@ try {
         $current_asset_dir = Join-Path "data" $_
         if (Test-Path $current_asset_dir) {
             $script:assets_found = $true
-            Copy-Item -Recurse -Path $current_asset_dir $temp_dir_textures
+            $copy_item_params = @{
+                Recurse     = $true
+                Path        = $current_asset_dir
+                Destination = $temp_dir_textures
+                Exclude     = $excluded_files
+            }
+            Copy-Item @copy_item_params
         }
     }
     # make texture BA2
     if ($assets_found) {
-        &$bsarch_exe `
+        & $bsarch_exe `
             pack `
-            "$temp_dir_general" `
+            "$temp_dir_textures" `
             "$data_dir\$ba2_base_name - Textures.ba2" `
             -$archive_type_dds `
             -z `
             -share `
             -mt
+        $ba2_archives_to_remove.Add("$data_dir\$ba2_base_name - Textures.ba2")
     }
 
     # create exclusion file for 7z
-    $content = @("meta.ini") + $asset_dirs + $texture_dirs | ForEach-Object {
+    $content = @("meta.ini") + $excluded_files + $asset_dirs + $texture_dirs | ForEach-Object {
         if ($PutInDataSubdirectory) {
             Join-Path "data" $_
         }
@@ -145,13 +173,21 @@ try {
     Set-Content -Path $7z_exclude_file -Value $content
     # make 7z
     if (Test-Path $7z_file) { Remove-Item -Force $7z_file }
+    $7z_params = @(
+        "a"
+        "-t7z"
+        "-mx9"
+        $7z_file
+        if ($PutInDataSubdirectory) { ".\data" } else { "." }
+        "-xr@$7z_exclude_file"
+    )
     if ($PutInDataSubdirectory) {
-        &$7z_exe a -t7z -mx9 $7z_file .\data -x@"$7z_exclude_file"
+        & $7z_exe $7z_params
     }
     else {
         $working_dir = Get-Location
         Set-Location $data_dir
-        &$7z_exe a -t7z -mx9 $7z_file . -x@"$7z_exclude_file"
+        & $7z_exe $7z_params
         Set-Location $working_dir
     }
 }
@@ -160,5 +196,5 @@ finally {
     Write-Output "temp_dir_textures: $temp_dir_textures"
     Remove-Item -Force -Recurse -Path $temp_dir_general
     Remove-Item -Force -Recurse -Path $temp_dir_textures
-    Remove-Item -Force (Join-Path $data_dir "*.ba2")
+    Remove-Item -Force $ba2_archives_to_remove
 }
