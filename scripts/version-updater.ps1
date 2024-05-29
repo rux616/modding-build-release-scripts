@@ -22,6 +22,7 @@ param (
     [string] $TextFileSchemaFile = ".\support\scripts\version-updater-text-file-schema.ps1",
     [string[]] $PluginFiles = (Get-ChildItem -Path ".\data\*" -Include "*.esl", "*.esm", "*.esp" -File),
     [switch] $SkipBackup,
+    [switch] $SkipBuildIncrement,
     [string] $BackupSuffix = ".$((Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmss\Z")).backup"
 )
 
@@ -43,7 +44,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "version-class.ps1")
 
 # update build number
-$version.IncrementBuild()
+if (-not $SkipBuildIncrement) { $version.IncrementBuild() }
 "version: " + $version.ToString($false)
 "version with build: " + $version.ToString($true)
 
@@ -51,6 +52,7 @@ $version.IncrementBuild()
 
 # text files
 [System.Collections.Generic.List[hashtable]] $text_files = New-Object System.Collections.Generic.List[hashtable]
+# source the schema file
 . $TextFileSchemaFile
 "------------------------------"
 $text_files | ForEach-Object {
