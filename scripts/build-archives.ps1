@@ -33,7 +33,7 @@ param (
 function New-TemporaryDirectory {
     $parent = [System.IO.Path]::GetTempPath()
     [string] $name = [System.Guid]::NewGuid()
-    New-Item -ItemType Directory -Path (Join-Path $parent $name)
+    New-Item -ItemType Directory -Path (Join-Path $parent $name) | Out-Null
 }
 
 # stop the script if an uncaught error happens
@@ -55,7 +55,7 @@ $data_dir = Join-Path $local_dir "data"
 $7z_file = Join-Path $build_dir ($ModName.Replace(" ", "_") + "-v" + $version + ".7z")
 
 if (-not (Test-Path $build_dir)) {
-    New-Item -ItemType Directory -Path $build_dir
+    New-Item -ItemType Directory -Path $build_dir | Out-Null
 }
 
 $bsarch_exe = Join-Path $PSScriptRoot "..\bin\BSArch\BSArch64.exe"
