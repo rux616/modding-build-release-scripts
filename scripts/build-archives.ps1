@@ -33,7 +33,7 @@ param (
 function New-TemporaryDirectory {
     $parent = [System.IO.Path]::GetTempPath()
     [string] $name = [System.Guid]::NewGuid()
-    New-Item -ItemType Directory -Path (Join-Path $parent $name) | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $parent $name)
 }
 
 # stop the script if an uncaught error happens
