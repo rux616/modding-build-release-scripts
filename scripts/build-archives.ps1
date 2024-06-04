@@ -20,24 +20,290 @@
 
 param (
     [Parameter(Mandatory)] [string] $ModName,
+    [string] $DataDir = ".\data",
     [string] $PluginName,
     [switch] $PutInDataSubdirectory,
     [switch] $IncludeBuildNumber,
     [switch] $PutInVersionSubdirectory,
-    [string[]] $Exclude,
+    [string] $ManifestCustomizations = ".\support\scripts\archive-manifest-customizations.ps1",
     [Parameter(ParameterSetName = "Fallout 4", Mandatory)] [switch] $Fallout4,
     [Parameter(ParameterSetName = "Starfield", Mandatory)] [switch] $Starfield
 )
 
-# https://stackoverflow.com/a/34559554
-function New-TemporaryDirectory {
-    $parent = [System.IO.Path]::GetTempPath()
-    [string] $name = [System.Guid]::NewGuid()
-    New-Item -ItemType Directory -Path (Join-Path $parent $name)
-}
-
 # stop the script if an uncaught error happens
 $ErrorActionPreference = "Stop"
+
+# record the start time of the script for the purposes of creating unique temporary directories
+$start_time = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+
+# https://stackoverflow.com/a/34559554
+function New-TemporaryDirectory {
+    param([string] $Prefix)
+    $parent = [System.IO.Path]::GetTempPath()
+    [string] $name = [System.Guid]::NewGuid()
+    if ($Prefix) { $name = $Prefix + "_" + $name }
+    return New-Item -ItemType Directory -Path (Join-Path $parent $name)
+}
+
+function Join-Paths {
+    param([Parameter(Mandatory, ValueFromRemainingArguments)] [string[]] $Paths)
+    $final_path = $Paths[0]
+    foreach ($path in $Paths[1..($Paths.Length - 1)]) {
+        if (-not $path) { continue }
+        $final_path = Join-Path $final_path $path
+    }
+    return $final_path
+}
+
+enum FilterType {
+    Literal
+    RegEx
+    Wildcard
+}
+
+class ItemFilter : System.IEquatable[Object] {
+    [string] $FilterString
+    [FilterType] $FilterType
+
+    [bool] Equals([Object] $obj) {
+        if ($null -eq $obj) { return $false }
+        if ($obj -isnot [ItemFilter]) { return $false }
+        $other = [ItemFilter] $obj
+        return $this.FilterString -eq $other.FilterString -and $this.FilterType -eq $other.FilterType
+    }
+
+    [string] ToString() { return "$($this.FilterType):$($this.FilterString)" }
+
+    [bool] FilterStringContains([string[]] $Strings) {
+        foreach ($string in $Strings) {
+            if ($this.FilterString.Contains($string)) { return $true }
+        }
+        return $false
+    }
+}
+
+class AssetDirectory : System.IEquatable[Object] {
+    [string] $Path
+    [bool] $Compressible
+
+    AssetDirectory([hashtable] $Properties) {
+        $this.Path = $Properties.Path
+        $this.Compressible = $Properties.Compressible
+    }
+
+    [bool] Equals([Object] $obj) {
+        if ($null -eq $obj) { return $false }
+        if ($obj -isnot [AssetDirectory]) { return $false }
+
+        $other = [AssetDirectory] $obj
+
+        return $this.Path.Equals($other.Path) -and $this.Compressible.Equals($other.Compressible)
+    }
+
+    [string] ToString() { return "$($this.Path)" }
+}
+
+function Initialize-ItemFilters {
+    [OutputType([System.Collections.Generic.HashSet[ItemFilter]])]
+    param([string[]] $FilterStrings)
+
+    $ignore_case = $true  # ignore case for the purposes of determining filter type
+    $culture = $null  # use the current culture
+    $to_return = [System.Collections.Generic.HashSet[ItemFilter]]::new()
+
+    foreach ($filter_string in $FilterStrings) {
+        if ($filter_string.StartsWith("$([FilterType]::RegEx):", $ignore_case, $culture)) {
+            $filter_string = $filter_string.Substring($filter_string.IndexOf(":") + 1)
+            $filter_type = [FilterType]::RegEx
+        }
+        elseif ($filter_string.StartsWith("$([FilterType]::Literal):", $ignore_case, $culture)) {
+            $filter_string = $filter_string.Substring($filter_string.IndexOf(":") + 1)
+            $filter_type = [FilterType]::Literal
+        }
+        elseif ($filter_string.StartsWith("$([FilterType]::Wildcard):", $ignore_case, $culture)) {
+            $filter_string = $filter_string.Substring($filter_string.IndexOf(":") + 1)
+            $filter_type = [FilterType]::Wildcard
+        }
+        elseif ((@("*", "?", "[") | Where-Object { $filter_string.Contains($_) }).Count -gt 0) {
+            $filter_type = [FilterType]::Wildcard
+        }
+        else {
+            $filter_type = [FilterType]::Literal
+        }
+
+        # remove leading ".\", "./", "\", or "/"
+        if ($filter_string -match "^\.[\\/]+") { $filter_string = $filter_string.Substring(2) }
+        elseif ($filter_string -match "^[\\/]+") { $filter_string = $filter_string.Substring(1) }
+
+        if ($filter_string -eq "") { throw "Filter string is empty" }
+
+        $to_return.Add(
+            [ItemFilter]@{
+                FilterString = $filter_string
+                FilterType   = $filter_type
+            }
+        ) | Out-Null
+    }
+
+    return $to_return
+}
+
+function Invoke-ItemFilter {
+    [OutputType([bool])]
+    param (
+        [string] $ItemPath,
+        [string] $ItemName,
+        [System.Collections.Generic.HashSet[ItemFilter]] $Filters
+    )
+    $directory_separators = @("\", "/")
+
+    foreach ($filter in $Filters) {
+        $comparison_string = if ($filter.FilterStringContains($directory_separators)) {
+            $ItemPath
+        }
+        else {
+            $ItemName
+        }
+        switch ($filter.FilterType) {
+            ([FilterType]::Literal) { if ($comparison_string -eq $filter.FilterString) { return $true } }
+            ([FilterType]::RegEx) { if ($comparison_string -match $filter.FilterString) { return $true } }
+            ([FilterType]::Wildcard) { if ($comparison_string -like $filter.FilterString) { return $true } }
+        }
+    }
+
+    return $false
+}
+
+function Get-FilteredItems {
+    param (
+        [string] $Path,
+        [string] $BasePath,
+        [System.Collections.Generic.HashSet[ItemFilter]] $ExcludeFilters,
+        [System.Collections.Generic.HashSet[ItemFilter]] $IncludeFilters,
+        [switch] $IncludeByDefault
+    )
+
+    $filtered_items = [System.Collections.Generic.List[string]]::new()
+    $current_location = Get-Location
+    Set-Location $BasePath
+
+    try {
+        $files = @(Get-ChildItem -Path $Path -File -Recurse)
+
+        foreach ($file in $files) {
+            $arguments = @{
+                ItemPath = ($file | Resolve-Path -Relative).Substring(2)
+                ItemName = $file.Name
+            }
+
+            $arguments.Filters = $IncludeFilters
+            $explicit_include = Invoke-ItemFilter @arguments
+
+            $exclude = if (-not $explicit_include) {
+                $arguments.Filters = $ExcludeFilters
+                Invoke-ItemFilter @arguments
+            }
+            else {
+                $false
+            }
+
+            if ($exclude) { continue }
+            else { $filtered_items.Add($arguments.ItemPath) | Out-Null }
+        }
+    }
+    finally {
+        Set-Location $current_location
+    }
+
+    return $filtered_items
+}
+
+function Copy-FilteredItems {
+    param(
+        [System.Collections.Generic.HashSet[AssetDirectory]] $AssetDirectories,
+        [string] $DataDir = $DataDir,
+        [string] $TempDir,
+        [System.Collections.Generic.HashSet[ItemFilter]] $ExcludeFilters,
+        [System.Collections.Generic.HashSet[ItemFilter]] $IncludeFilters,
+        [switch] $PutInDataSubdirectory
+    )
+
+    $assets_found = $false
+    $assets_compressible = $true
+
+    foreach ($current_asset_dir in $AssetDirectories) {
+        $get_filtered_items_params = @{
+            Path           = $current_asset_dir
+            BasePath       = $DataDir
+            ExcludeFilters = $ExcludeFilters
+            IncludeFilters = $IncludeFilters
+        }
+        $filtered_items = Get-FilteredItems @get_filtered_items_params
+
+        if ($filtered_items.Count -gt 0) {
+            $assets_found = $true
+            if ($assets_compressible) { $assets_compressible = $current_asset_dir.Compressible }
+            foreach ($item in $filtered_items) {
+                $destination = Join-Paths @(
+                    $TempDir
+                    if ($PutInDataSubdirectory) { "data" }
+                    $item
+                )
+                New-Item -Path (Split-Path -Path $destination) -ItemType Directory -Force | Out-Null
+                Copy-Item -Path (Join-Path $DataDir $item) -Destination $destination
+            }
+        }
+    }
+
+    return $assets_found, $assets_compressible
+}
+
+enum ArchiveType {
+    BA2
+    SevenZip
+}
+
+function New-Archive {
+    param(
+        [string] $SourceDir,
+        [string] $ArchiveName,
+        [string] $Ba2Type,
+        [switch] $Compressible,
+        [ArchiveType] $ArchiveType
+    )
+
+    $current_location = Get-Location
+    Set-Location $SourceDir
+
+    try {
+        switch ($ArchiveType) {
+            ([ArchiveType]::BA2) {
+                $arguments = @(
+                    "pack"
+                    ".\"
+                    "$ArchiveName"
+                    "-$Ba2Type"
+                    if ($Compressible) { "-z" }
+                    "-share"
+                    "-mt"
+                )
+                BSArch64.exe $arguments
+            }
+            ([ArchiveType]::SevenZip) {
+                $arguments = @(
+                    "a"
+                    "-t7z"
+                    "-mx9"
+                    "$ArchiveName"
+                )
+                7zr.exe $arguments
+            }
+        }
+    }
+    finally {
+        Set-Location $current_location
+    }
+}
 
 # source version class
 . (Join-Path $PSScriptRoot "version-class.ps1")
@@ -50,7 +316,7 @@ $archive_type_dds = if ($Fallout4) { "fo4dds" } elseif ($Starfield) { "sf1dds" }
 
 $ba2_base_name = if ($PluginName) { $PluginName } else { $ModName.Replace(" ", "") }
 $local_dir = Get-Location
-$build_dir = Join-Path $local_dir "builds" $(if ($PutInVersionSubdirectory) { $version.ToString($false) })
+$build_dir = Join-Paths $local_dir "builds" $(if ($PutInVersionSubdirectory) { $version.ToString($false) })
 $data_dir = Join-Path $local_dir "data"
 $7z_file = Join-Path $build_dir ($ModName.Replace(" ", "_") + "-v" + $version + ".7z")
 
@@ -58,143 +324,170 @@ if (-not (Test-Path $build_dir)) {
     New-Item -ItemType Directory -Path $build_dir | Out-Null
 }
 
-$bsarch_exe = Join-Path $PSScriptRoot "..\bin\BSArch\BSArch64.exe"
-$7z_exe = Join-Path $PSScriptRoot "..\bin\7-Zip\7zr.exe"
+$env:PATH = (Resolve-Path (Join-Path $PSScriptRoot "..\bin\BSArch")).Path + ";" + $env:PATH
+$env:PATH = (Resolve-Path (Join-Path $PSScriptRoot "..\bin\7-Zip")).Path + ";" + $env:PATH
 
-$temp_dir_general = New-TemporaryDirectory
-$temp_dir_textures = New-TemporaryDirectory
+$temp_dir_general = New-TemporaryDirectory "build-archives_$($start_time)_general"
+$temp_dir_textures = New-TemporaryDirectory "build-archives_$($start_time)_textures"
+$temp_dir_7z = New-TemporaryDirectory "build-archives_$($start_time)_7z"
+Write-Output "temp_dir_general: $temp_dir_general"
+Write-Output "temp_dir_textures: $temp_dir_textures"
+Write-Output "temp_dir_7z: $temp_dir_7z"
 $ba2_archives_to_remove = [System.Collections.Generic.List[string]]::new()
 try {
-    # excluded files
-    $excluded_files = @(
-        "*.psc"
-        "*.*sonnet"
-        "*.ppj"
-    ) + $Exclude
-    # potential directories to put into general BA2s:
-    $asset_dirs = @(
-        "distantlod"
-        "geometries"
-        "interface"
-        "lodsettings"
-        "materials"
-        "meshes"
-        "misc"
-        "particles"
-        "planetdata"
-        "scripts"
-        "shadersfx"
-        "sound"
-        "space"
-        "strings"
-        "terrain"
+    # universal exclusions
+    $exclude_all = [System.Collections.Generic.SortedSet[string]]@(
+        "meta.ini"
     )
-    # if these directories are present, an archive becomes non-compressible
-    $non_compressible_asset_dirs = @(
-        "interface"
-        "sound"
-        "strings"
-    )
-    # copy stuff to be put in a general BA2 to a temporary directory
-    $assets_found = $false
-    $assets_compressible = $true
-    $asset_dirs | ForEach-Object {
-        $current_asset_dir = Join-Path "data" $_
-        if (Test-Path $current_asset_dir) {
-            $script:assets_found = $true
-            if ($non_compressible_asset_dirs -contains $_) {
-                $script:assets_compressible = $false
-            }
-            $copy_item_params = @{
-                Recurse     = $true
-                Path        = $current_asset_dir
-                Destination = $temp_dir_general
-                Exclude     = $excluded_files
-            }
-            Copy-Item @copy_item_params
-        }
-    }
-    # make general BA2
-    If ($assets_found) {
-        & $bsarch_exe `
-            pack `
-            "$temp_dir_general" `
-            "$data_dir\$ba2_base_name - Main.ba2" `
-            -$archive_type `
-            "$(if ($assets_compressible) { "-z" } else {})" `
-            -share `
-            -mt
-        $ba2_archives_to_remove.Add("$data_dir\$ba2_base_name - Main.ba2")
+
+    # ba2 archive manifest
+    $archive_manifest_ba2 = @{
+        asset_dirs   = [System.Collections.Generic.HashSet[AssetDirectory]]@(
+            [AssetDirectory]@{ Path = "distantlod"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "geometries"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "interface"; Compressible = $false; }
+            [AssetDirectory]@{ Path = "lodsettings"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "materials"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "meshes"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "misc"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "particles"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "planetdata"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "scripts"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "shadersfx"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "sound"; Compressible = $false; }
+            [AssetDirectory]@{ Path = "space"; Compressible = $true; }
+            [AssetDirectory]@{ Path = "strings"; Compressible = $false; }
+            [AssetDirectory]@{ Path = "terrain"; Compressible = $true; }
+        )
+        texture_dirs = [System.Collections.Generic.HashSet[AssetDirectory]]@(
+            [AssetDirectory]@{ Path = "textures"; Compressible = $true; }
+        )
+        exclude      = [System.Collections.Generic.SortedSet[string]]@(
+            "*.ini"
+            "*.psc"
+        )
+        include      = [System.Collections.Generic.SortedSet[string]]@()
     }
 
-    # potential directories to put into texture BA2s:
-    $texture_dirs = @(
-        "textures"
-    )
-    # copy stuff to be put in a texture BA2 to a temporary directory
-    $assets_found = $false
-    $texture_dirs | ForEach-Object {
-        $current_asset_dir = Join-Path "data" $_
-        if (Test-Path $current_asset_dir) {
-            $script:assets_found = $true
-            $copy_item_params = @{
-                Recurse     = $true
-                Path        = $current_asset_dir
-                Destination = $temp_dir_textures
-                Exclude     = $excluded_files
-            }
-            Copy-Item @copy_item_params
-        }
+    # 7z archive manifest
+    $archive_manifest_7z = @{
+        asset_dirs = [System.Collections.Generic.HashSet[AssetDirectory]]@(
+            [AssetDirectory]@{ Path = "*"; Compressible = $true; }
+        )
+        exclude    = [System.Collections.Generic.SortedSet[string]]@()
+        include    = [System.Collections.Generic.SortedSet[string]]@()
     }
-    # make texture BA2
+
+    # customizations
+    if (Test-Path $ManifestCustomizations) {
+        . $ManifestCustomizations
+    }
+
+    # powershell arrays are not compatible with UnionWith methods, so convert them to generic collections
+    $additional_exclude_all = [System.Collections.Generic.List[string]] $additional_exclude_all
+    $additional_asset_dirs = [System.Collections.Generic.List[AssetDirectory]] $additional_asset_dirs
+    $additional_texture_dirs = [System.Collections.Generic.List[AssetDirectory]] $additional_texture_dirs
+    $additional_exclude_ba2 = [System.Collections.Generic.List[string]] $additional_exclude_ba2
+    $additional_include_ba2 = [System.Collections.Generic.List[string]] $additional_include_ba2
+    $additional_exclude_7z = [System.Collections.Generic.List[string]] $additional_exclude_7z
+    $additional_include_7z = [System.Collections.Generic.List[string]] $additional_include_7z
+
+    # now that the arrays are generic collections, we can add them to the manifest
+    if ($additional_exclude_all.Count) { $exclude_all.UnionWith($additional_exclude_all) }
+    if ($additional_asset_dirs.Count) { $archive_manifest_ba2.asset_dirs.UnionWith($additional_asset_dirs) }
+    if ($additional_texture_dirs.Count) { $archive_manifest_ba2.texture_dirs.UnionWith($additional_texture_dirs) }
+    if ($additional_exclude_ba2.Count) { $archive_manifest_ba2.exclude.UnionWith($additional_exclude_ba2) }
+    if ($additional_include_ba2.Count) { $archive_manifest_ba2.include.UnionWith($additional_include_ba2) }
+    if ($additional_exclude_7z.Count) { $archive_manifest_7z.exclude.UnionWith($additional_exclude_7z) }
+    if ($additional_include_7z.Count) { $archive_manifest_7z.include.UnionWith($additional_include_7z) }
+
+    # now that the ba2 archive manifest is complete, we can add the asset directories to the 7z manifest exclusions
+    foreach ($dir in $archive_manifest_ba2.asset_dirs) { [void] $archive_manifest_7z.exclude.Add($dir.Path + "\*") }
+    foreach ($dir in $archive_manifest_ba2.texture_dirs) { [void] $archive_manifest_7z.exclude.Add($dir.Path + "\*") }
+
+    # combine exclude_all with the other exclude sets
+    $archive_manifest_ba2.exclude.UnionWith($exclude_all)
+    $archive_manifest_7z.exclude.UnionWith($exclude_all)
+
+    # convert exclusions and inclusions to hash sets of ItemFilter objects
+    $archive_manifest_ba2.exclude = Initialize-ItemFilters $archive_manifest_ba2.exclude
+    $archive_manifest_ba2.include = Initialize-ItemFilters $archive_manifest_ba2.include
+    $archive_manifest_7z.exclude = Initialize-ItemFilters $archive_manifest_7z.exclude
+    $archive_manifest_7z.include = Initialize-ItemFilters $archive_manifest_7z.include
+
+    # copy assets to be put in a general BA2 to a temporary directory
+    $arguments = @{
+        AssetDirectories = $archive_manifest_ba2.asset_dirs
+        DataDir          = $DataDir
+        TempDir          = $temp_dir_general
+        ExcludeFilters   = $archive_manifest_ba2.exclude
+        IncludeFilters   = $archive_manifest_ba2.include
+    }
+    $assets_found, $assets_compressible = Copy-FilteredItems @arguments
+    # create general BA2
+    $arguments = @{
+        SourceDir    = $temp_dir_general
+        ArchiveType  = [ArchiveType]::BA2
+        ArchiveName  = Join-Path $data_dir "$ba2_base_name - Main.ba2"
+        Ba2Type      = $archive_type
+        Compressible = $assets_compressible
+    }
     if ($assets_found) {
-        & $bsarch_exe `
-            pack `
-            "$temp_dir_textures" `
-            "$data_dir\$ba2_base_name - Textures.ba2" `
-            -$archive_type_dds `
-            -z `
-            -share `
-            -mt
-        $ba2_archives_to_remove.Add("$data_dir\$ba2_base_name - Textures.ba2")
+        New-Archive @arguments
+        $ba2_archives_to_remove.Add($arguments.ArchiveName)
     }
 
-    # create exclusion file for 7z
-    $content = @("meta.ini") + $excluded_files + $asset_dirs + $texture_dirs | ForEach-Object {
-        if ($PutInDataSubdirectory) {
-            Join-Path "data" $_
-        }
-        else {
-            $_
-        }
+    # copy assets to be put in a texture BA2 to a temporary directory
+    $arguments = @{
+        AssetDirectories = $archive_manifest_ba2.texture_dirs
+        DataDir          = $DataDir
+        TempDir          = $temp_dir_textures
+        ExcludeFilters   = $archive_manifest_ba2.exclude
+        IncludeFilters   = $archive_manifest_ba2.include
     }
-    $7z_exclude_file = Join-Path $temp_dir_general "7z-exclude.txt"
-    Write-Output "7z_exclude_file = $7z_exclude_file"
-    Set-Content -Path $7z_exclude_file -Value $content
-    # make 7z
-    if (Test-Path $7z_file) { Remove-Item -Force $7z_file }
-    $7z_params = @(
-        "a"
-        "-t7z"
-        "-mx9"
-        $7z_file
-        if ($PutInDataSubdirectory) { ".\data" } else { "." }
-        "-xr@$7z_exclude_file"
+    $assets_found, $assets_compressible = Copy-FilteredItems @arguments
+    # create texture BA2
+    $arguments = @{
+        SourceDir    = $temp_dir_textures
+        ArchiveType  = [ArchiveType]::BA2
+        ArchiveName  = Join-Path $data_dir "$ba2_base_name - Textures.ba2"
+        Ba2Type      = $archive_type_dds
+        Compressible = $assets_compressible
+    }
+    if ($assets_found) {
+        New-Archive @arguments
+        $ba2_archives_to_remove.Add($arguments.ArchiveName)
+    }
+
+    # copy assets to be put in a 7z to a temporary directory
+    $arguments = @{
+        AssetDirectories = $archive_manifest_7z.asset_dirs
+        DataDir          = $DataDir
+        TempDir          = $temp_dir_7z
+        ExcludeFilters   = $archive_manifest_7z.exclude
+        IncludeFilters   = $archive_manifest_7z.include
+    }
+    $assets_found, $assets_compressible = Copy-FilteredItems @arguments
+    # create 7z
+    $arguments = @{
+        SourceDir   = $temp_dir_7z
+        ArchiveType = [ArchiveType]::SevenZip
+        ArchiveName = $7z_file
+    }
+    if ($assets_found) { New-Archive @arguments }
+}
+catch {
+    $error_message = @(
+        "$($_.Exception.Message)`n"
+        "$($_.InvocationInfo.PositionMessage)`n"
+        "    + CategoryInfo          : $($_.CategoryInfo)`n"
+        "    + FullyQualifiedErrorId : $($_.FullyQualifiedErrorId)`n"
     )
-    if ($PutInDataSubdirectory) {
-        & $7z_exe $7z_params
-    }
-    else {
-        $working_dir = Get-Location
-        Set-Location $data_dir
-        & $7z_exe $7z_params
-        Set-Location $working_dir
-    }
+    Write-Host -Foreground Red -Background Black $error_message
 }
 finally {
-    Write-Output "temp_dir_general: $temp_dir_general"
-    Write-Output "temp_dir_textures: $temp_dir_textures"
     Remove-Item -Force -Recurse -Path $temp_dir_general
     Remove-Item -Force -Recurse -Path $temp_dir_textures
-    Remove-Item -Force $ba2_archives_to_remove
+    Remove-Item -Force -Recurse -Path $temp_dir_7z
+    $ba2_archives_to_remove | ForEach-Object { if ((Test-Path $_)) { Remove-Item -Force $_ } }
 }
