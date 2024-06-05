@@ -45,9 +45,8 @@ $fomod_xml_files | ForEach-Object {
     # remove "&#13;&#10;"
     $content = $content -replace '&#13;&#10;', ''
 
-    # save file as UTF-8 with no BOM
-    $utf8_no_bom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllLines($file, $content, $utf8_no_bom)
+    # save file as UTF-16 LE
+    Set-Content -Path $file -Value $content -Encoding Unicode
 
     Write-Host "Sanitized"
 }
