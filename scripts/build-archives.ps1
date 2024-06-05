@@ -316,7 +316,11 @@ $archive_type_dds = if ($Fallout4) { "fo4dds" } elseif ($Starfield) { "sf1dds" }
 
 $ba2_base_name = if ($PluginName) { $PluginName } else { $ModName.Replace(" ", "") }
 $local_dir = Get-Location
-$build_dir = Join-Paths $local_dir "builds" $(if ($PutInVersionSubdirectory) { $version.ToString($false) })
+$build_dir = Join-Paths @(
+    $local_dir
+    "builds"
+    if ($PutInVersionSubdirectory) { $version.ToString($false) }
+)
 $data_dir = Join-Path $local_dir "data"
 $7z_file = Join-Path $build_dir ($ModName.Replace(" ", "_") + "-v" + $version + ".7z")
 
