@@ -40,21 +40,70 @@ if (-not ($Fallout4 -xor $Starfield)) {
 $game_release = if ($Fallout4) { "Fallout4" } elseif ($Starfield) { "Starfield" }
 $output_format = if ($YAML) { "Spriggit.Yaml" } elseif ($JSON) { "Spriggit.Json" }
 
-# serialize each plugin individually
-$PluginNames | ForEach-Object {
-    $plugin_name = $_
-    $spriggit_arguments = @(
-        "serialize"
-        "--InputPath"
-        ".\data\$plugin_name"
-        "--OutputPath"
-        ".\spriggit\$plugin_name"
-        "--GameRelease"
-        $game_release
-        "--PackageName"
-        $output_format
-        "--PackageVersion"
-        "0.18.0"
-    )
-    & (Join-Path $PSScriptRoot "..\bin\SpriggitCLI\Spriggit.CLI.exe") $spriggit_arguments
+$spriggit_error = $null
+foreach ($i in 1..2) {
+    if ($null -eq $spriggit_error) {
+        # do nothing, loop hasn't run yet
+        [void] 'noop'
+    }
+    elseif ($spriggit_error -eq $false) {
+        # loop ran successfully
+        break
+    }
+    elseif ($spriggit_error -eq $true) {
+        # first loop iteration failed, delete spriggit's temp folder and try again
+        $arguments = @{
+            ForegroundColor = [System.ConsoleColor]::Red
+            BackgroundColor = [System.ConsoleColor]::Black
+            Object          = "Failed to serialize plugins. Deleting Spriggit temp folder and trying again."
+        }
+        Write-Host @arguments
+        $spriggit_temp_folder = Join-Path ([System.IO.Path]::GetTempPath()) "Spriggit"
+        if ((Test-Path $spriggit_temp_folder)) {
+            Remove-Item -Path $spriggit_temp_folder -Recurse -Force
+            $spriggit_error = $null
+        }
+        else {
+            Write-Host -ForegroundColor Red -BackgroundColor Black "Failed to find Spriggit temp folder to delete."
+            break
+        }
+    }
+    else {
+        throw "Unexpected value for spriggit_error (how?!?): $spriggit_error"
+    }
+
+    # serialize each plugin individually
+    $PluginNames | ForEach-Object {
+        $plugin_name = $_
+        $spriggit_arguments = @(
+            "serialize"
+            "--InputPath"
+            ".\data\$plugin_name"
+            "--OutputPath"
+            ".\spriggit\$plugin_name"
+            "--GameRelease"
+            $game_release
+            "--PackageName"
+            $output_format
+            "--PackageVersion"
+            "0.18.0"
+        )
+        & (Join-Path $PSScriptRoot "..\bin\SpriggitCLI\Spriggit.CLI.exe") $spriggit_arguments
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host -ForegroundColor Red -BackgroundColor Black "Failed to serialize plugin $plugin_name."
+            $script:spriggit_error = $true
+        }
+        else {
+            Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully serialized plugin $plugin_name."
+        }
+    }
+
+    # if spriggit ran successfully, $spriggit_error will still be null, so set it to false
+    if ($null -eq $spriggit_error) {
+        $spriggit_error = $false
+        Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully serialized all plugins."
+        break
+    }
 }
+
+exit $spriggit_error
