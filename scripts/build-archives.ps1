@@ -272,6 +272,9 @@ function New-Archive {
         [ArchiveType] $ArchiveType
     )
 
+    # remove existing archive
+    if (Test-Path $ArchiveName) { Remove-Item -Force $ArchiveName }
+
     $current_location = Get-Location
     Set-Location $SourceDir
 
@@ -337,7 +340,7 @@ $temp_dir_7z = New-TemporaryDirectory "build-archives_$($start_time)_7z"
 Write-Output "temp_dir_general: $temp_dir_general"
 Write-Output "temp_dir_textures: $temp_dir_textures"
 Write-Output "temp_dir_7z: $temp_dir_7z"
-$ba2_archives_to_remove = [System.Collections.Generic.List[string]]::new()
+$ba2_archives_to_clean_up = [System.Collections.Generic.List[string]]::new()
 try {
     # universal exclusions
     $exclude_all = [System.Collections.Generic.SortedSet[string]]@(
@@ -438,7 +441,7 @@ try {
     }
     if ($assets_found) {
         New-Archive @arguments
-        $ba2_archives_to_remove.Add($arguments.ArchiveName)
+        $ba2_archives_to_clean_up.Add($arguments.ArchiveName)
     }
 
     # copy assets to be put in a texture BA2 to a temporary directory
@@ -460,7 +463,7 @@ try {
     }
     if ($assets_found) {
         New-Archive @arguments
-        $ba2_archives_to_remove.Add($arguments.ArchiveName)
+        $ba2_archives_to_clean_up.Add($arguments.ArchiveName)
     }
 
     # copy assets to be put in a 7z to a temporary directory
@@ -493,5 +496,5 @@ finally {
     Remove-Item -Force -Recurse -Path $temp_dir_general
     Remove-Item -Force -Recurse -Path $temp_dir_textures
     Remove-Item -Force -Recurse -Path $temp_dir_7z
-    $ba2_archives_to_remove | ForEach-Object { if ((Test-Path $_)) { Remove-Item -Force $_ } }
+    $ba2_archives_to_clean_up | ForEach-Object { if ((Test-Path $_)) { Remove-Item -Force $_ } }
 }
