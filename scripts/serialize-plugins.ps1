@@ -46,7 +46,7 @@ $spriggit_zip = Join-Path $spriggit_dir "SpriggitCLI.zip"
 
 # unpack SpriggitCLI if it hasn't been unpacked yet
 if (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
-    Expand-Archive -Path $spriggit_zip -DestinationPath (Join-Path $PSScriptRoot $spriggit_dir)
+    Expand-Archive -Path (Join-Path $PSScriptRoot $spriggit_zip) -DestinationPath (Join-Path $PSScriptRoot $spriggit_dir)
 }
 
 $spriggit_error = $null
