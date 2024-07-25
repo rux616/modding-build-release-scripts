@@ -55,6 +55,8 @@ process {
         # remove '__...__'
         # "__foo bar baz__" -> ""
         $content = $content -replace "(?<=^|\W)__(.+?)__(?=\W)", "`$1"
+        # remove images
+        $content = $content -replace "!\[.*?\]\(.*?\)$line_ending$line_ending", ""
         # strip markdown URLs
         # "[foo bar](https://foo.com/bar)" -> "foo bar (https://foo.com/bar)"
         $content = $content -replace "\[(.*?)\](\(.*?\))", "`$1 `$2"
