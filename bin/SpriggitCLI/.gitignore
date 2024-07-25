@@ -1,0 +1,6 @@
+# ignore everything in this directory
+*
+# except this file
+!.gitignore
+# and the spriggit zip
+!SpriggitCLI.zip
