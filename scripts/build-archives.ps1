@@ -371,6 +371,7 @@ try {
         )
         exclude      = [System.Collections.Generic.SortedSet[string]]@(
             "*.ini"
+            "*.pas"
             "*.psc"
         )
         include      = [System.Collections.Generic.SortedSet[string]]@()
@@ -381,7 +382,9 @@ try {
         asset_dirs = [System.Collections.Generic.HashSet[AssetDirectory]]@(
             [AssetDirectory]@{ Path = "*"; Compressible = $true; }
         )
-        exclude    = [System.Collections.Generic.SortedSet[string]]@()
+        exclude    = [System.Collections.Generic.SortedSet[string]]@(
+            "*.pas"
+        )
         include    = [System.Collections.Generic.SortedSet[string]]@()
     }
 
