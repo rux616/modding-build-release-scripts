@@ -344,6 +344,9 @@ $ba2_archives_to_clean_up = [System.Collections.Generic.List[string]]::new()
 try {
     # universal exclusions
     $exclude_all = [System.Collections.Generic.SortedSet[string]]@(
+        "*.bak"
+        "*.pas"
+        "*.ppj"
         "meta.ini"
     )
 
@@ -371,7 +374,6 @@ try {
         )
         exclude      = [System.Collections.Generic.SortedSet[string]]@(
             "*.ini"
-            "*.pas"
             "*.psc"
         )
         include      = [System.Collections.Generic.SortedSet[string]]@()
@@ -382,9 +384,7 @@ try {
         asset_dirs = [System.Collections.Generic.HashSet[AssetDirectory]]@(
             [AssetDirectory]@{ Path = "*"; Compressible = $true; }
         )
-        exclude    = [System.Collections.Generic.SortedSet[string]]@(
-            "*.pas"
-        )
+        exclude    = [System.Collections.Generic.SortedSet[string]]@()
         include    = [System.Collections.Generic.SortedSet[string]]@()
     }
 
