@@ -19,7 +19,7 @@
 # build archives
 
 param (
-    [Parameter(Mandatory)] [string] $ModName,
+    [string] $ModName,
     [string] $DataDir = ".\data",
     [string] $PluginName,
     [switch] $PutInDataSubdirectory,
@@ -27,7 +27,10 @@ param (
     [switch] $PutInVersionSubdirectory,
     [string] $ManifestCustomizations = ".\support\scripts\archive-manifest-customizations.ps1",
     [Parameter(ParameterSetName = "Fallout 4", Mandatory)] [switch] $Fallout4,
-    [Parameter(ParameterSetName = "Starfield", Mandatory)] [switch] $Starfield
+    [Parameter(ParameterSetName = "Starfield", Mandatory)] [switch] $Starfield,
+    [switch] $SkipBA2,
+    [switch] $Skip7z,
+    [switch] $SkipBA2Cleanup
 )
 
 # stop the script if an uncaught error happens
@@ -340,7 +343,6 @@ $temp_dir_7z = New-TemporaryDirectory "build-archives_$($start_time)_7z"
 Write-Output "temp_dir_general: $temp_dir_general"
 Write-Output "temp_dir_textures: $temp_dir_textures"
 Write-Output "temp_dir_7z: $temp_dir_7z"
-$ba2_archives_to_clean_up = [System.Collections.Generic.List[string]]::new()
 try {
     # universal exclusions
     $exclude_all = [System.Collections.Generic.SortedSet[string]]@(
@@ -425,66 +427,68 @@ try {
     $archive_manifest_7z.exclude = Initialize-ItemFilters $archive_manifest_7z.exclude
     $archive_manifest_7z.include = Initialize-ItemFilters $archive_manifest_7z.include
 
-    # copy assets to be put in a general BA2 to a temporary directory
-    $arguments = @{
-        AssetDirectories = $archive_manifest_ba2.asset_dirs
-        DataDir          = $DataDir
-        TempDir          = $temp_dir_general
-        ExcludeFilters   = $archive_manifest_ba2.exclude
-        IncludeFilters   = $archive_manifest_ba2.include
-    }
-    $assets_found, $assets_compressible = Copy-FilteredItems @arguments
-    # create general BA2
-    $arguments = @{
-        SourceDir    = $temp_dir_general
-        ArchiveType  = [ArchiveType]::BA2
-        ArchiveName  = Join-Path $data_dir "$ba2_base_name - Main.ba2"
-        Ba2Type      = $archive_type
-        Compressible = $assets_compressible
-    }
-    if ($assets_found) {
-        New-Archive @arguments
-        $ba2_archives_to_clean_up.Add($arguments.ArchiveName)
+    if (-not $SkipBA2) {
+        # copy assets to be put in a general BA2 to a temporary directory
+        $arguments = @{
+            AssetDirectories = $archive_manifest_ba2.asset_dirs
+            DataDir          = $DataDir
+            TempDir          = $temp_dir_general
+            ExcludeFilters   = $archive_manifest_ba2.exclude
+            IncludeFilters   = $archive_manifest_ba2.include
+        }
+        $assets_found, $assets_compressible = Copy-FilteredItems @arguments
+        # create general BA2
+        $arguments = @{
+            SourceDir    = $temp_dir_general
+            ArchiveType  = [ArchiveType]::BA2
+            ArchiveName  = Join-Path $data_dir "$ba2_base_name - Main.ba2"
+            Ba2Type      = $archive_type
+            Compressible = $assets_compressible
+        }
+        if ($assets_found) {
+            New-Archive @arguments
+        }
+
+        # copy assets to be put in a texture BA2 to a temporary directory
+        $arguments = @{
+            AssetDirectories = $archive_manifest_ba2.texture_dirs
+            DataDir          = $DataDir
+            TempDir          = $temp_dir_textures
+            ExcludeFilters   = $archive_manifest_ba2.exclude
+            IncludeFilters   = $archive_manifest_ba2.include
+        }
+        $assets_found, $assets_compressible = Copy-FilteredItems @arguments
+        # create texture BA2
+        $arguments = @{
+            SourceDir    = $temp_dir_textures
+            ArchiveType  = [ArchiveType]::BA2
+            ArchiveName  = Join-Path $data_dir "$ba2_base_name - Textures.ba2"
+            Ba2Type      = $archive_type_dds
+            Compressible = $assets_compressible
+        }
+        if ($assets_found) {
+            New-Archive @arguments
+        }
     }
 
-    # copy assets to be put in a texture BA2 to a temporary directory
-    $arguments = @{
-        AssetDirectories = $archive_manifest_ba2.texture_dirs
-        DataDir          = $DataDir
-        TempDir          = $temp_dir_textures
-        ExcludeFilters   = $archive_manifest_ba2.exclude
-        IncludeFilters   = $archive_manifest_ba2.include
+    if (-not $Skip7z) {
+        # copy assets to be put in a 7z to a temporary directory
+        $arguments = @{
+            AssetDirectories = $archive_manifest_7z.asset_dirs
+            DataDir          = $DataDir
+            TempDir          = $temp_dir_7z
+            ExcludeFilters   = $archive_manifest_7z.exclude
+            IncludeFilters   = $archive_manifest_7z.include
+        }
+        $assets_found, $assets_compressible = Copy-FilteredItems @arguments
+        # create 7z
+        $arguments = @{
+            SourceDir   = $temp_dir_7z
+            ArchiveType = [ArchiveType]::SevenZip
+            ArchiveName = $7z_file
+        }
+        if ($assets_found) { New-Archive @arguments }
     }
-    $assets_found, $assets_compressible = Copy-FilteredItems @arguments
-    # create texture BA2
-    $arguments = @{
-        SourceDir    = $temp_dir_textures
-        ArchiveType  = [ArchiveType]::BA2
-        ArchiveName  = Join-Path $data_dir "$ba2_base_name - Textures.ba2"
-        Ba2Type      = $archive_type_dds
-        Compressible = $assets_compressible
-    }
-    if ($assets_found) {
-        New-Archive @arguments
-        $ba2_archives_to_clean_up.Add($arguments.ArchiveName)
-    }
-
-    # copy assets to be put in a 7z to a temporary directory
-    $arguments = @{
-        AssetDirectories = $archive_manifest_7z.asset_dirs
-        DataDir          = $DataDir
-        TempDir          = $temp_dir_7z
-        ExcludeFilters   = $archive_manifest_7z.exclude
-        IncludeFilters   = $archive_manifest_7z.include
-    }
-    $assets_found, $assets_compressible = Copy-FilteredItems @arguments
-    # create 7z
-    $arguments = @{
-        SourceDir   = $temp_dir_7z
-        ArchiveType = [ArchiveType]::SevenZip
-        ArchiveName = $7z_file
-    }
-    if ($assets_found) { New-Archive @arguments }
 }
 catch {
     $error_message = @(
@@ -499,5 +503,7 @@ finally {
     Remove-Item -Force -Recurse -Path $temp_dir_general
     Remove-Item -Force -Recurse -Path $temp_dir_textures
     Remove-Item -Force -Recurse -Path $temp_dir_7z
-    $ba2_archives_to_clean_up | ForEach-Object { if ((Test-Path $_)) { Remove-Item -Force $_ } }
+    if (-not $SkipBA2Cleanup) {
+        Get-ChildItem -Path $data_dir -Filter "*.ba2" | ForEach-Object { Remove-Item -Force $_ }
+    }
 }
