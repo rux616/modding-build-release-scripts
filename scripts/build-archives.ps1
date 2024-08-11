@@ -30,7 +30,10 @@ param (
     [Parameter(ParameterSetName = "Starfield", Mandatory)] [switch] $Starfield,
     [switch] $SkipBA2,
     [switch] $Skip7z,
-    [switch] $SkipBA2Cleanup
+    [switch] $SkipBA2Cleanup,
+    [switch] $BA2AlsoMakeXbox,
+    [switch] $BA2ForceUncompressed,
+    [switch] $BA2DisableSharing
 )
 
 # stop the script if an uncaught error happens
@@ -289,8 +292,8 @@ function New-Archive {
                     ".\"
                     "$ArchiveName"
                     "-$Ba2Type"
-                    if ($Compressible) { "-z" }
-                    "-share"
+                    if ($Compressible -and -not $BA2ForceUncompressed) { "-z" }
+                    if (-not $BA2DisableSharing) { "-share" }
                     "-mt"
                 )
                 BSArch64.exe $arguments
@@ -386,7 +389,7 @@ try {
         asset_dirs = [System.Collections.Generic.HashSet[AssetDirectory]]@(
             [AssetDirectory]@{ Path = "*"; Compressible = $true; }
         )
-        exclude    = [System.Collections.Generic.SortedSet[string]]@()
+        exclude    = [System.Collections.Generic.SortedSet[string]]@("*_xbox.ba2")
         include    = [System.Collections.Generic.SortedSet[string]]@()
     }
 
@@ -447,6 +450,10 @@ try {
         }
         if ($assets_found) {
             New-Archive @arguments
+            if ($BA2AlsoMakeXbox) {
+                $xbox_archive_name = $arguments.ArchiveName.Substring(0, $arguments.ArchiveName.Length - 4) + "_xbox.ba2"
+                Copy-Item -Path $arguments.ArchiveName -Destination $xbox_archive_name
+            }
         }
 
         # copy assets to be put in a texture BA2 to a temporary directory
@@ -468,6 +475,10 @@ try {
         }
         if ($assets_found) {
             New-Archive @arguments
+            if ($BA2AlsoMakeXbox) {
+                $xbox_archive_name = $arguments.ArchiveName.Substring(0, $arguments.ArchiveName.Length - 4) + "_xbox.ba2"
+                Copy-Item -Path $arguments.ArchiveName -Destination $xbox_archive_name
+            }
         }
     }
 
