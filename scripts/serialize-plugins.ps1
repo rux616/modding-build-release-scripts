@@ -125,7 +125,7 @@ foreach ($i in 1..2) {
             "--PackageName"
             "Spriggit.$output_format"
             "--PackageVersion"
-            "0.25.0"
+            "0.26.0"
         )
         & (Join-Path $PSScriptRoot $spriggit_exe) $spriggit_arguments
         if ($LASTEXITCODE -ne 0) {
