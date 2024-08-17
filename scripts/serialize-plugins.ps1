@@ -41,11 +41,36 @@ $game_release = if ($Fallout4) { "Fallout4" } elseif ($Starfield) { "Starfield" 
 $output_format = if ($YAML) { "Yaml" } elseif ($JSON) { "Json" }
 
 $spriggit_dir = "..\bin\SpriggitCLI"
-$spriggit_exe = Join-Path $spriggit_dir "Spriggit.CLI.exe"
-$spriggit_zip = Join-Path $spriggit_dir "SpriggitCLI.zip"
+$spriggit_exe_name = "Spriggit.CLI.exe"
+$spriggit_exe = Join-Path $spriggit_dir $spriggit_exe_name
+$spriggit_zip_name = "SpriggitCLI.zip"
+$spriggit_zip = Join-Path $spriggit_dir $spriggit_zip_name
+$spriggit_cache_name = "spriggit.cache"
+$spriggit_cache = Join-Path $spriggit_dir $spriggit_cache_name
+
+# read cache file if it exists
+if (Test-Path (Join-Path $PSScriptRoot $spriggit_cache)) {
+    $cache = Get-Content (Join-Path $PSScriptRoot $spriggit_cache) | ConvertFrom-Json -AsHashtable
+}
+$cache_new = [ordered]@{}
 
 # unpack SpriggitCLI if it hasn't been unpacked yet
-if (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
+$cache_new.$spriggit_zip_name = (Get-FileHash -Algorithm MD5 -Path (Join-Path $PSScriptRoot $spriggit_zip)).Hash
+if (`
+    (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) -or `
+    ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name)`
+) {
+    if ($cache.$spriggit_zip_name -ne $spriggit_zip_hash) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_zip_name has changed. Invalidating cache, deleting old files, and unpacking new archive."
+        $cache = @{}
+    }
+    elseif (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_exe_name not found. Unpacking archive."
+    }
+
+    Get-ChildItem -Path (Join-Path $PSScriptRoot $spriggit_dir)`
+    | Where-Object { -not ($_.Name -in @($spriggit_zip_name, ".gitignore", "spriggit.cache")) } `
+    | Remove-Item -Recurse -Force
     Expand-Archive -Path (Join-Path $PSScriptRoot $spriggit_zip) -DestinationPath (Join-Path $PSScriptRoot $spriggit_dir)
 }
 
@@ -84,6 +109,11 @@ foreach ($i in 1..2) {
     # serialize each plugin individually
     $PluginNames | ForEach-Object {
         $plugin_name = $_
+        $script:cache_new.$plugin_name = (Get-FileHash -Algorithm MD5 -Path ".\data\$plugin_name").Hash
+        if ($cache.$plugin_name -eq $script:cache_new.$plugin_name) {
+            Write-Host -ForegroundColor Yellow -BackgroundColor Black "Skipping plugin $plugin_name because it hasn't changed."
+            return
+        }
         $spriggit_arguments = @(
             "serialize"
             "--InputPath"
@@ -113,6 +143,11 @@ foreach ($i in 1..2) {
         Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully serialized all plugins."
         break
     }
+}
+
+# write cache file
+if (-not $spriggit_error) {
+    $cache_new | ConvertTo-Json | Set-Content (Join-Path $PSScriptRoot $spriggit_cache)
 }
 
 exit $spriggit_error
