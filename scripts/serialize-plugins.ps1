@@ -20,6 +20,7 @@
 
 param (
     [string[]] $PluginNames = (Get-ChildItem -Path ".\data\*" -Include "*.esl", "*.esm", "*.esp" -File).Name,
+    [string] $DataFolder,
     [switch] $JSON,
     [switch] $YAML,
     [switch] $Fallout4,
@@ -54,18 +55,27 @@ if (Test-Path (Join-Path $PSScriptRoot $spriggit_cache)) {
 }
 $cache_new = [ordered]@{}
 
-# unpack SpriggitCLI if it hasn't been unpacked yet
+# check if things need to be totally re-serialized
 $cache_new.$spriggit_zip_name = (Get-FileHash -Algorithm MD5 -Path (Join-Path $PSScriptRoot $spriggit_zip)).Hash
+$cache_new."DataFolder" = $DataFolder
 if (`
     (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) -or `
-    ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name)`
+    ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name) -or `
+    ($cache."DataFolder" -ne $cache_new."DataFolder") `
 ) {
-    if ($cache.$spriggit_zip_name -ne $spriggit_zip_hash) {
-        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_zip_name has changed. Invalidating cache, deleting old files, and unpacking new archive."
+    if (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_exe_name not found. Unpacking archive."
+    }
+    elseif (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_cache))) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "Existing cache file not found. Performing full serialization."
+    }
+    elseif ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_zip_name hash has changed (cache: $($cache.$spriggit_zip_name), file: $($cache_new.$spriggit_zip_name)). Invalidating cache, deleting old files, and unpacking new archive."
         $cache = @{}
     }
-    elseif (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
-        Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_exe_name not found. Unpacking archive."
+    elseif ($cache."DataFolder" -ne $DataFolder) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "DataFolder has changed (cache: `"$($cache."DataFolder")`", given: `"$DataFolder`"). Invalidating cache and re-serializing plugins."
+        $cache = @{}
     }
 
     Get-ChildItem -Path (Join-Path $PSScriptRoot $spriggit_dir)`
@@ -126,6 +136,8 @@ foreach ($i in 1..2) {
             "Spriggit.$output_format"
             "--PackageVersion"
             "0.26.0"
+            if ($DataFolder) { "--DataFolder" }
+            if ($DataFolder) { $DataFolder }
         )
         & (Join-Path $PSScriptRoot $spriggit_exe) $spriggit_arguments
         if ($LASTEXITCODE -ne 0) {
