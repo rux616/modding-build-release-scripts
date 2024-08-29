@@ -59,7 +59,7 @@ process {
         $content = $content -replace "!\[(.*)\]\((.*)\s*`"?(.*)`"?\)($line_ending$line_ending?)", "(Image: `$1)`$4"
         # strip markdown URLs
         # "[foo bar](https://foo.com/bar)" -> "foo bar (https://foo.com/bar)"
-        $content = $content -replace "\[(.*?)\](\(.*?\))", "`$1 `$2"
+        $content = $content -replace "(?<!!)\[((?>\[(?<c>)|[^[\]]+|\](?<-c>))*(?(c)(?!)))\]\(((?>\((?<c>)|[^()]+|\)(?<-c>))*(?(c)(?!)))\)", "`$1 (`$2)"
         # convert indented code to have 4 space indentations
         # "      foo = bar + baz" -> "    foo = bar + baz"
         $content = $content -replace "($line_ending*)[ ]{5,}(?! *-|\* )(.*?)($line_ending*)", "`$1    `$2`$3"

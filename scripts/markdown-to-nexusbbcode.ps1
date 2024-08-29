@@ -58,7 +58,7 @@ process {
         # convert '![...](... "...")' to '[img]...[/img]'
         $content = $content -replace "!\[(.*)\]\((.*)\s*`"?(.*)`"?\)", "[img]`$2[/img]"
         # convert markdown URLs to BBCode URLs
-        $content = $content -replace "\[([^]]*)]\(([^)]*)\)", "[url=`$2]`$1[/url]"
+        $content = $content -replace "(?<!!)\[((?>\[(?<c>)|[^[\]]+|\](?<-c>))*(?(c)(?!)))\]\(((?>\((?<c>)|[^()]+|\)(?<-c>))*(?(c)(?!)))\)", "[url=`$2]`$1[/url]"
         # convert '`...`' to '[font=Courier New][color=#$code_font_color]...[/color][/font]'
         $content = $content -replace "``(.*?)``", "[font=Courier New][color=#$code_font_color]`$1[/color][/font]"
         $content = $content -replace "(?<=$line_ending)[ ]{4,}(?! *-|\* )(.*?)(?=$line_ending)", "    [font=Courier New][color=#$code_font_color]`$1[/color][/font]"
