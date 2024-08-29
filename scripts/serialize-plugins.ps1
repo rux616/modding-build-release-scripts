@@ -20,6 +20,7 @@
 
 param (
     [string[]] $PluginNames = (Get-ChildItem -Path ".\data\*" -Include "*.esl", "*.esm", "*.esp" -File).Name,
+    [string] $PackageVersion,
     [string] $DataFolder,
     [switch] $JSON,
     [switch] $YAML,
@@ -41,6 +42,7 @@ if (-not ($Fallout4 -xor $Starfield)) {
 $game_release = if ($Fallout4) { "Fallout4" } elseif ($Starfield) { "Starfield" }
 $output_format = if ($YAML) { "Yaml" } elseif ($JSON) { "Json" }
 
+# define paths
 $spriggit_dir = "..\bin\SpriggitCLI"
 $spriggit_exe_name = "Spriggit.CLI.exe"
 $spriggit_exe = Join-Path $spriggit_dir $spriggit_exe_name
@@ -48,6 +50,16 @@ $spriggit_zip_name = "SpriggitCLI.zip"
 $spriggit_zip = Join-Path $spriggit_dir $spriggit_zip_name
 $spriggit_cache_name = "spriggit.cache"
 $spriggit_cache = Join-Path $spriggit_dir $spriggit_cache_name
+
+# if PackageVersion is not given, get the latest version from NuGet
+if ($null -eq $PackageVersion -or $PackageVersion -eq "") {
+    $nuget_url = "https://api.nuget.org/v3-flatcontainer/spriggit.$($output_format.ToLower()).$($game_release.ToLower())/index.json"
+    $PackageVersion = ((Invoke-RestMethod -Uri $nuget_url).versions -match "^\d+\.\d+\.\d+$")[-1]
+    if ($null -eq $PackageVersion) {
+        throw "Failed to get the latest version of Spriggit from NuGet."
+    }
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "No PackageVersion given. Using latest version from NuGet."
+}
 
 # read cache file if it exists
 if (Test-Path (Join-Path $PSScriptRoot $spriggit_cache)) {
@@ -57,10 +69,12 @@ $cache_new = [ordered]@{}
 
 # check if things need to be totally re-serialized
 $cache_new.$spriggit_zip_name = (Get-FileHash -Algorithm MD5 -Path (Join-Path $PSScriptRoot $spriggit_zip)).Hash
+$cache_new."PackageVersion" = $PackageVersion
 $cache_new."DataFolder" = $DataFolder
 if (`
     (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) -or `
     ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name) -or `
+    ($cache."PackageVersion" -ne $cache_new."PackageVersion") -or `
     ($cache."DataFolder" -ne $cache_new."DataFolder") `
 ) {
     if (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
@@ -73,8 +87,12 @@ if (`
         Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_zip_name hash has changed (cache: $($cache.$spriggit_zip_name), file: $($cache_new.$spriggit_zip_name)). Invalidating cache, deleting old files, and unpacking new archive."
         $cache = @{}
     }
-    elseif ($cache."DataFolder" -ne $DataFolder) {
-        Write-Host -ForegroundColor Yellow -BackgroundColor Black "DataFolder has changed (cache: `"$($cache."DataFolder")`", given: `"$DataFolder`"). Invalidating cache and re-serializing plugins."
+    elseif ($cache."PackageVersion" -ne $cache_new."PackageVersion") {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "PackageVersion has changed (cache: `"$($cache."PackageVersion")`", given: `"$($cache_new."PackageVersion")`"). Invalidating cache and re-serializing plugins."
+        $cache = @{}
+    }
+    elseif ($cache."DataFolder" -ne $cache_new."DataFolder") {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "DataFolder has changed (cache: `"$($cache."DataFolder")`", given: `"$($cache_new."DataFolder")`"). Invalidating cache and re-serializing plugins."
         $cache = @{}
     }
 
@@ -135,7 +153,7 @@ foreach ($i in 1..2) {
             "--PackageName"
             "Spriggit.$output_format"
             "--PackageVersion"
-            "0.26.0"
+            $PackageVersion
             if ($DataFolder) { "--DataFolder" }
             if ($DataFolder) { $DataFolder }
         )
@@ -143,6 +161,7 @@ foreach ($i in 1..2) {
         if ($LASTEXITCODE -ne 0) {
             Write-Host -ForegroundColor Red -BackgroundColor Black "Failed to serialize plugin $plugin_name."
             $script:spriggit_error = $true
+            return
         }
         else {
             Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully serialized plugin $plugin_name."
