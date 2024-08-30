@@ -25,8 +25,19 @@ param (
     [switch] $JSON,
     [switch] $YAML,
     [switch] $Fallout4,
-    [switch] $Starfield
+    [switch] $Starfield,
+    [switch] $Force
 )
+
+enum GameRelease {
+    Fallout4
+    Starfield
+}
+
+enum OutputFormat {
+    Json
+    Yaml
+}
 
 # make sure to stop if an error happens
 $ErrorActionPreference = "Stop"
@@ -39,8 +50,12 @@ if (-not ($Fallout4 -xor $Starfield)) {
     throw "You must specify one of either Fallout 4 or Starfield as the game release."
 }
 
-$game_release = if ($Fallout4) { "Fallout4" } elseif ($Starfield) { "Starfield" }
-$output_format = if ($YAML) { "Yaml" } elseif ($JSON) { "Json" }
+$game_release = if ($Fallout4) { [GameRelease]::Fallout4 } elseif ($Starfield) { [GameRelease]::Starfield }
+$output_format = if ($YAML) { [OutputFormat]::Yaml } elseif ($JSON) { [OutputFormat]::Json }
+
+if ($null -eq $PluginNames -or $PluginNames.Count -eq 0) {
+    throw "No plugins found to serialize."
+}
 
 # define paths
 $spriggit_dir = "..\bin\SpriggitCLI"
@@ -72,12 +87,17 @@ $cache_new.$spriggit_zip_name = (Get-FileHash -Algorithm MD5 -Path (Join-Path $P
 $cache_new."PackageVersion" = $PackageVersion
 $cache_new."DataFolder" = $DataFolder
 if (`
+    ($Force) -or `
     (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) -or `
     ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name) -or `
     ($cache."PackageVersion" -ne $cache_new."PackageVersion") -or `
     ($cache."DataFolder" -ne $cache_new."DataFolder") `
 ) {
-    if (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
+    if ($Force) {
+        Write-Host -ForegroundColor Yellow -BackgroundColor Black "Forcing full serialization."
+        $cache = @{}
+    }
+    elseif (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_exe))) {
         Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_exe_name not found. Unpacking archive."
     }
     elseif (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_cache))) {
