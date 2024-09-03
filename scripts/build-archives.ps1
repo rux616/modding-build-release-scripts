@@ -350,6 +350,7 @@ try {
     # universal exclusions
     $exclude_all = [System.Collections.Generic.SortedSet[string]]@(
         "*.bak"
+        "*.ignore"
         "*.pas"
         "*.ppj"
         "meta.ini"
