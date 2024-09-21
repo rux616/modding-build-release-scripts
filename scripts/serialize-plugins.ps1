@@ -68,7 +68,7 @@ $spriggit_cache = Join-Path $spriggit_dir $spriggit_cache_name
 
 # if PackageVersion is not given, get the latest version from NuGet
 if ($null -eq $PackageVersion -or $PackageVersion -eq "") {
-    $nuget_url = "https://api.nuget.org/v3-flatcontainer/spriggit.$($output_format.ToLower()).$($game_release.ToLower())/index.json"
+    $nuget_url = "https://api.nuget.org/v3-flatcontainer/spriggit.$($output_format.ToString().ToLower()).$($game_release.ToString().ToLower())/index.json"
     $PackageVersion = ((Invoke-RestMethod -Uri $nuget_url).versions -match "^\d+\.\d+\.\d+$")[-1]
     if ($null -eq $PackageVersion) {
         throw "Failed to get the latest version of Spriggit from NuGet."
