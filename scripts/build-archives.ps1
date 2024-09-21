@@ -20,7 +20,7 @@
 
 param (
     [string] $ModName,
-    [ValidateScript({ Test-Path $DataDir })] [string] $DataDir = ".\data",
+    [ValidateScript({ Test-Path $_ })] [string] $DataDir = ".\data",
     [string] $PluginName,
     [switch] $PutInDataSubdirectory,
     [switch] $IncludeBuildNumber,
