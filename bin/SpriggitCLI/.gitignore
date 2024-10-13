@@ -3,4 +3,4 @@
 # except this file
 !.gitignore
 # and the spriggit zip
-!SpriggitCLI.zip
+!SpriggitCLI*.zip
