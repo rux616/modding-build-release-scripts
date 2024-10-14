@@ -502,15 +502,6 @@ try {
         if ($assets_found) { New-Archive @arguments }
     }
 }
-catch {
-    $error_message = @(
-        "$($_.Exception.Message)`n"
-        "$($_.InvocationInfo.PositionMessage)`n"
-        "    + CategoryInfo          : $($_.CategoryInfo)`n"
-        "    + FullyQualifiedErrorId : $($_.FullyQualifiedErrorId)`n"
-    )
-    Write-Host -Foreground Red -Background Black $error_message
-}
 finally {
     Remove-Item -Force -Recurse -Path $temp_dir_general
     Remove-Item -Force -Recurse -Path $temp_dir_textures
