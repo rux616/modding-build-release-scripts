@@ -42,6 +42,15 @@ enum OutputFormat {
     Yaml
 }
 
+# https://learn.microsoft.com/en-us/powershell/scripting/learn/deep-dives/everything-about-hashtable?view=powershell-5.1#deep-copies
+function Get-DeepClone {
+    param(
+        $InputObject
+    )
+    $TempCliXmlString = [System.Management.Automation.PSSerializer]::Serialize($InputObject, [int32]::MaxValue)
+    return [System.Management.Automation.PSSerializer]::Deserialize($TempCliXmlString)
+}
+
 # make sure to stop if an error happens
 $ErrorActionPreference = "Stop"
 
@@ -64,7 +73,8 @@ if ($null -eq $PluginNames -or $PluginNames.Count -eq 0) {
 $spriggit_dir = "..\bin\SpriggitCLI"
 $spriggit_exe_name = "Spriggit.CLI.exe"
 $spriggit_exe = Join-Path $spriggit_dir $spriggit_exe_name
-$spriggit_zip_name = (Get-ChildItem -Path (Join-Path $PSScriptRoot $spriggit_dir) -Filter "SpriggitCLI-v*.zip").Name
+# use sort-object | select-object -last 1 to get the latest version if more than one zip file, assuming standard naming
+$spriggit_zip_name = (Get-ChildItem -Path (Join-Path $PSScriptRoot $spriggit_dir) -Filter "SpriggitCLI-v*.zip" | Sort-Object | Select-Object -Last 1).Name
 $spriggit_zip = Join-Path $spriggit_dir $spriggit_zip_name
 $spriggit_cache_name = $CacheFile
 $spriggit_cache = Join-Path $spriggit_dir $spriggit_cache_name
@@ -96,7 +106,8 @@ if (Test-Path (Join-Path $PSScriptRoot $spriggit_cache)) {
 $cache_new = [ordered]@{}
 
 # check if things need to be totally re-serialized
-$cache_new.$spriggit_zip_name = (Get-FileHash -Algorithm MD5 -Path (Join-Path $PSScriptRoot $spriggit_zip)).Hash
+$cache_new."SpriggitZipName" = $spriggit_zip_name
+$cache_new."SpriggitZipHash" = (Get-FileHash -Algorithm MD5 -Path (Join-Path $PSScriptRoot $spriggit_zip)).Hash
 $cache_new."PackageVersion" = $PackageVersion
 $cache_new."DataFolder" = $DataFolder
 $cache_new."PluginFolder" = $PluginFolder
@@ -114,8 +125,9 @@ elseif (-not (Test-Path (Join-Path $PSScriptRoot $spriggit_cache))) {
     Write-Host -ForegroundColor Yellow -BackgroundColor Black "Existing cache file not found. Performing full serialization."
     $unpack_archive = $true
 }
-elseif ($cache.$spriggit_zip_name -ne $cache_new.$spriggit_zip_name) {
-    Write-Host -ForegroundColor Yellow -BackgroundColor Black "$spriggit_zip_name hash has changed (cache: $($cache.$spriggit_zip_name), file: $($cache_new.$spriggit_zip_name)). Invalidating cache, deleting old files, and unpacking new archive."
+elseif ($cache."SpriggitZipHash" -ne $cache_new."SpriggitZipHash") {
+    if ($null -eq $cache."SpriggitZipHash") { $cache."SpriggitZipHash" = "<none>" }
+    Write-Host -ForegroundColor Yellow -BackgroundColor Black "Spriggit zip hash has changed (cache: $($cache."SpriggitZipHash"), file: $($cache_new."SpriggitZipHash")). Invalidating cache, deleting old files, and unpacking new archive."
     $cache = @{}
     $unpack_archive = $true
 }
@@ -203,12 +215,16 @@ foreach ($i in 1..2) {
         if ($LASTEXITCODE -ne 0) {
             Write-Host -ForegroundColor Red -BackgroundColor Black "Failed to serialize plugin $plugin_name."
             $script:spriggit_error = $true
+            $script:cache_new.Remove($plugin_name) | Out-Null
             return
         }
         else {
             Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully serialized plugin $plugin_name."
         }
     }
+
+    # deep copy cache_new so that if an error occurs, plugins don't get unnecessarily re-serialized
+    $cache = Get-DeepClone $cache_new
 
     # if spriggit ran successfully, $spriggit_error will still be null, so set it to false
     if ($null -eq $spriggit_error) {
@@ -219,8 +235,6 @@ foreach ($i in 1..2) {
 }
 
 # write cache file
-if (-not $spriggit_error) {
-    $cache_new | ConvertTo-Json | Set-Content (Join-Path $PSScriptRoot $spriggit_cache)
-}
+$cache_new | ConvertTo-Json | Set-Content (Join-Path $PSScriptRoot $spriggit_cache)
 
 exit $spriggit_error
