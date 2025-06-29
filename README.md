@@ -9,6 +9,6 @@ this repo is intended to be used as a git submodule
 - assumes a `.version.ps1` file exists under the project root
 
 ## included binaries
-- 7-Zip (r) v24.05 (2024-05-14)
+- 7-Zip (r) v24.09 (2024-11-29)
 - BSArch64 v0.9d as included with xEdit 4.1.5g
 - SpriggitCLI v0.25
