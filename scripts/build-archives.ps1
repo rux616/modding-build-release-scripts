@@ -32,6 +32,7 @@ param (
     [switch] $Skip7z,
     [switch] $SkipBA2Cleanup,
     [switch] $BA2AlsoMakeXbox,
+    [switch] $BA2AlsoMakePS,
     [switch] $BA2ForceUncompressed,
     [switch] $BA2DisableSharing
 )
@@ -455,6 +456,10 @@ try {
                 $xbox_archive_name = $arguments.ArchiveName.Substring(0, $arguments.ArchiveName.Length - 4) + "_xbox.ba2"
                 Copy-Item -Path $arguments.ArchiveName -Destination $xbox_archive_name
             }
+            if ($BA2AlsoMakePS) {
+                $ps_archive_name = $arguments.ArchiveName.Substring(0, $arguments.ArchiveName.Length - 4) + "_ps.ba2"
+                Copy-Item -Path $arguments.ArchiveName -Destination $ps_archive_name
+            }
         }
 
         # copy assets to be put in a texture BA2 to a temporary directory
@@ -479,6 +484,10 @@ try {
             if ($BA2AlsoMakeXbox) {
                 $xbox_archive_name = $arguments.ArchiveName.Substring(0, $arguments.ArchiveName.Length - 4) + "_xbox.ba2"
                 Copy-Item -Path $arguments.ArchiveName -Destination $xbox_archive_name
+            }
+            if ($BA2AlsoMakePS) {
+                $ps_archive_name = $arguments.ArchiveName.Substring(0, $arguments.ArchiveName.Length - 4) + "_ps.ba2"
+                Copy-Item -Path $arguments.ArchiveName -Destination $ps_archive_name
             }
         }
     }
