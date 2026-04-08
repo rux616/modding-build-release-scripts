@@ -193,7 +193,6 @@ foreach ($i in 1..2) {
     }
 
     # serialize each plugin individually
-    $temp_plugin_folder = New-TemporaryDirectory
     $PluginNames | ForEach-Object {
         $plugin_name = $_
         $script:cache_new.$plugin_name = (Get-FileHash -Algorithm MD5 -Path "$PluginFolder\$plugin_name").Hash
@@ -202,43 +201,11 @@ foreach ($i in 1..2) {
             return
         }
 
-        # sort randomized fields first
-        $spriggit_arguments = @(
-            "sort-randomized-fields"
-            "--InputPath"
-            "$PluginFolder\$plugin_name"
-            "--OutputPath"
-            "$temp_plugin_folder\$plugin_name"
-            "--GameRelease"
-            $game_release
-            "--KnownMasterAnchorDirectory"
-            $OutputFolder
-            if ($DataFolder -or $game_release -eq [GameRelease]::Starfield) { "--DataFolder" }
-            if ($DataFolder -or $game_release -eq [GameRelease]::Starfield) { $DataFolder }
-        )
-        & (Join-Path $PSScriptRoot $spriggit_exe) $spriggit_arguments
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host -ForegroundColor Red -BackgroundColor Black "Failed to sort randomized fields for plugin $plugin_name."
-            $script:spriggit_error = $true
-            $script:cache_new.Remove($plugin_name) | Out-Null
-            return
-        }
-        else {
-            # if the plugin didn't need sorting, it is not copied to the temp folder, so copy the original manually
-            if (-not (Test-Path "$temp_plugin_folder\$plugin_name")) {
-                Write-Host -ForegroundColor Green -BackgroundColor Black "Plugin $plugin_name did not need sorting, copying original to temporary folder."
-                Copy-Item -Path "$PluginFolder\$plugin_name" -Destination "$temp_plugin_folder\$plugin_name"
-            }
-            else {
-                Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully sorted randomized fields for plugin $plugin_name."
-            }
-        }
-
         # serialize the plugin
         $spriggit_arguments = @(
             "serialize"
             "--InputPath"
-            "$temp_plugin_folder\$plugin_name"
+            "$PluginFolder\$plugin_name"
             "--OutputPath"
             "$OutputFolder\$plugin_name"
             "--GameRelease"
@@ -260,14 +227,6 @@ foreach ($i in 1..2) {
         else {
             Write-Host -ForegroundColor Green -BackgroundColor Black "Successfully serialized plugin $plugin_name."
         }
-    }
-
-    # clean up the temporary plugin folder
-    if (Test-Path $temp_plugin_folder) {
-        Remove-Item -Path $temp_plugin_folder -Recurse -Force
-    }
-    else {
-        Write-Host -ForegroundColor Yellow -BackgroundColor Black "Failed to find temporary plugin folder to delete: $temp_plugin_folder"
     }
 
     # deep copy cache_new so that if an error occurs, plugins don't get unnecessarily re-serialized
