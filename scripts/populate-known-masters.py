@@ -49,19 +49,23 @@ def main(
 ) -> int:
     known_masters = set(
         [
-            # base game + patches as of v1.14.70.0
+            # base game + patches as of v1.16.236.0
             Master("Starfield.esm", MasterType.FULL),
             Master("SFBGS003.esm", MasterType.MEDIUM),
             Master("SFBGS004.esm", MasterType.SMALL),
             Master("SFBGS006.esm", MasterType.MEDIUM),
             Master("SFBGS007.esm", MasterType.SMALL),
             Master("SFBGS008.esm", MasterType.SMALL),
+            Master("SFBGS00D.esm", MasterType.FULL),
+            Master("SFBGS047.esm", MasterType.SMALL),
             Master("BlueprintShips-Starfield.esm", MasterType.FULL),
             # pre-release content
             Master("Constellation.esm", MasterType.SMALL),
             Master("OldMars.esm", MasterType.SMALL),
             # DLC
             Master("ShatteredSpace.esm", MasterType.FULL),
+            Master("SFBGS050.esm", MasterType.FULL),  # Terran Armada
+            Master("BlueprintShips-SFBGS050.esm", MasterType.FULL),  # Terran Armada
         ]
     )
 
