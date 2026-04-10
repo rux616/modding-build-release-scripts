@@ -31,6 +31,9 @@ class MasterType(str, enum.Enum):
     SMALL = "Small"
 
 
+# because this class is meant to be used with sets, it must implement __hash__ and __eq__ to ensure that duplicates are
+# not added. in this case, we want to consider two masters with the same name to be the same master, even if they have
+# different types, so we implement __hash__ and __eq__ accordingly.
 class Master(dict):
     def __init__(self, name: str, type: MasterType):
         dict.__init__(self, ModKey=name, Style=type)
@@ -38,27 +41,29 @@ class Master(dict):
         self.type = self["Style"]
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.name.lower())
 
     def __eq__(self, other):
-        return self.name == other.name
+        return self.name.lower() == other.name.lower()
 
 
 def main(
     full_masters: list[str], medium_masters: list[str], small_masters: list[str], spriggit_file: str, sort_by: str
 ) -> int:
+    # initialize known masters set with base game, patch, pre-release content, and DLC files
     known_masters = set(
         [
-            # base game + patches as of v1.16.236.0
+            # base game
             Master("Starfield.esm", MasterType.FULL),
-            Master("SFBGS003.esm", MasterType.MEDIUM),
-            Master("SFBGS004.esm", MasterType.SMALL),
-            Master("SFBGS006.esm", MasterType.MEDIUM),
-            Master("SFBGS007.esm", MasterType.SMALL),
-            Master("SFBGS008.esm", MasterType.SMALL),
-            Master("SFBGS00D.esm", MasterType.FULL),
-            Master("SFBGS047.esm", MasterType.SMALL),
             Master("BlueprintShips-Starfield.esm", MasterType.FULL),
+            # patches
+            Master("SFBGS003.esm", MasterType.MEDIUM),  # v1.12.30, 2024-06-09
+            Master("SFBGS004.esm", MasterType.SMALL),  # v1.13.61, 2024-08-20
+            Master("SFBGS006.esm", MasterType.MEDIUM),  # v1.11.36, 2024-05-15
+            Master("SFBGS007.esm", MasterType.SMALL),  # v1.11.36, 2024-05-15
+            Master("SFBGS008.esm", MasterType.SMALL),  # v1.11.36, 2024-05-15
+            Master("SFBGS00D.esm", MasterType.FULL),  # v1.16.236, 2026-04-07
+            Master("SFBGS047.esm", MasterType.SMALL),  # v1.16.236, 2026-04-07
             # pre-release content
             Master("Constellation.esm", MasterType.SMALL),
             Master("OldMars.esm", MasterType.SMALL),
