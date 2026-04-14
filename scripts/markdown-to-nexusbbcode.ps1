@@ -1,4 +1,4 @@
-# Copyright 2023 Dan Cassidy
+# Copyright 2026 Dan Cassidy
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,12 +21,21 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory, ValueFromRemainingArguments, ValueFromPipeline)]
-    [string[]] $Files
+    [string[]] $Files,
+    [Parameter(ParameterSetName = "NexusImageMap")]
+    [string] $NexusImageMapFile = ".\support\scripts\nexus-image-map.ps1"
 )
 
 begin {
     $line_ending = "`r`n"
     $code_font_color = "b2b2b2"
+
+    if ($null -ne $NexusImageMapFile -and (Test-Path -LiteralPath $NexusImageMapFile)) {
+        . $NexusImageMapFile
+    }
+    else {
+        $nexus_image_map = @{}
+    }
 }
 
 process {
@@ -59,6 +68,8 @@ process {
         $content = $content -replace "!\[(.*)\]\((.*) `".*`"\)", "[img]`$2[/img]"
         # convert '![...](...)' to '[img]...[/img]'
         $content = $content -replace "!\[(.*)\]\((.*)\)", "[img]`$2[/img]"
+        # apply nexus image map
+        $nexus_image_map.GetEnumerator() | ForEach-Object { $content = $content -replace [regex]::Escape("[img]$($_.Key)[/img]"), "[img]$($_.Value)[/img]" }
         # convert markdown URLs to BBCode URLs
         $content = $content -replace "(?<!!)\[((?>\[(?<c>)|[^[\]]+|\](?<-c>))*(?(c)(?!)))\]\(((?>\((?<c>)|[^()]+|\)(?<-c>))*(?(c)(?!)))\)", "[url=`$2]`$1[/url]"
         # convert '`...`' to '[font=Courier New][color=#$code_font_color]...[/color][/font]'
