@@ -80,6 +80,7 @@ process {
         $content = $content -replace "``(.*?)``", "[font=Courier New][color=#$code_font_color]`$1[/color][/font]"
         $content = $content -replace "(?<=$line_ending)[ ]{4,}(?! *-|\* )(.*?)(?=$line_ending)", "    [font=Courier New][color=#$code_font_color]`$1[/color][/font]"
 
+        # write output
         $content | Set-Content -LiteralPath $file_out -NoNewline
     }
 }

@@ -37,28 +37,30 @@ process {
 
         $content = Get-Content -LiteralPath $file_in -Raw
 
-        # remove anchor links
-        # "[foo bar](#foo-bar)" -> "foo bar"
-        $content = $content -replace "\[(.*?)\]\(#.*?\)", "`$1"
+        # strip anchor link formatting
+        # "[foo bar](#foo-bar)" -> ""foo bar""
+        $content = $content -replace "\[(.*?)\]\(#.*?\)", "`"`$1`""
         # remove any remaining '(TOC)' lines and an extra line
         # "$line_ending(TOC)$line_ending" -> ""
         $content = $content -replace "$line_ending\(TOC\)$line_ending", ""
         # remove '<details><summary>...</summary>' and an extra line
         # "$line_ending<details><summary>Click here to show more</summary>$line_ending" -> ""
         $content = $content -replace "$line_ending<details>.*?</summary>$line_ending", ""
-        # remove '</details>' and line
+        # remove '</details>' and an extra line
         # "$line_ending</details>$line_ending" -> ""
         $content = $content -replace "$line_ending</details>$line_ending", ""
-        # remove '**...**'
-        # "**foo bar baz**" -> ""
+        # strip '**...**'
+        # "**foo bar baz**" -> "foo bar baz"
         $content = $content -replace "(?<=^|\W)\*\*(.+?)\*\*(?=\W)", "`$1"
-        # remove '__...__'
-        # "__foo bar baz__" -> ""
+        # strip '__...__'
+        # "__foo bar baz__" -> "foo bar baz"
         $content = $content -replace "(?<=^|\W)__(.+?)__(?=\W)", "`$1"
         # strip escape character when in front of "_", "*", "<", ">"
         # "\_foo\_bar\_" -> "_foo_bar_"
         # "\<foo\>\_bar\_\<baz\>" -> "<foo>_bar_<baz>"
         $content = $content -replace "\\(_|\*|<|>)", "`$1"
+        # replace image links with alt text
+        # "![foo bar](https://foo.com/bar.jpg)" -> "(Image: foo bar)"
         $content = $content -replace "!\[(.*)\]\((.*)\s*`"?(.*)`"?\)($line_ending$line_ending?)", "(Image: `$1)`$4"
         # strip markdown URLs
         # "[foo bar](https://foo.com/bar)" -> "foo bar (https://foo.com/bar)"
@@ -67,6 +69,7 @@ process {
         # "      foo = bar + baz" -> "    foo = bar + baz"
         $content = $content -replace "($line_ending*)[ ]{5,}(?! *-|\* )(.*?)($line_ending*)", "`$1    `$2`$3"
 
+        # write output
         $content | Set-Content -LiteralPath $file_out -NoNewline
     }
 }
