@@ -59,11 +59,11 @@ process {
         $content = $content -replace "$line_ending<details>.*?</summary>$line_ending", ""
         $content = $content -replace "$line_ending</details>$line_ending", ""
         # convert '**...**' and '__...__' to '[b]...[/b]'
-        $content = $content -replace "(?<=^|\W)\*\*(.+?)\*\*(?=\W)", "[b]`$1[/b]"
-        $content = $content -replace "(?<=^|\W)__(.+?)__(?=\W)", "[b]`$1[/b]"
+        $content = $content -replace "(?<=^|\W)(?<!>)(?<!\\)\*\*(.+?)\*\*(?=\W)(?!\\<|<)", "[b]`$1[/b]"
+        $content = $content -replace "(?<=^|\W)(?<!>)(?<!\\)__(.+?)__(?=\W)(?!\\<|<)", "[b]`$1[/b]"
         # convert '*...*' and '_..._' to '[i]...[/i]'
-        $content = $content -replace "(?<=^|\W)\*(.+?)\*(?=\W)", "[u]`$1[/u]"
-        $content = $content -replace "(?<=^|\W)_(.+?)_(?=\W)", "[u]`$1[/u]"
+        $content = $content -replace "(?<=^|\W)(?<!>)(?<!\\)\*(.+?)\*(?=\W)(?!\\<|<)", "[u]`$1[/u]"
+        $content = $content -replace "(?<=^|\W)(?<!>)(?<!\\)_(.+?)_(?=\W)(?!\\<|<)", "[u]`$1[/u]"
         # convert '![...](... "...")' to '[img]...[/img]'
         $content = $content -replace "!\[(.*)\]\((.*) `".*`"\)", "[img]`$2[/img]"
         # convert '![...](...)' to '[img]...[/img]'
