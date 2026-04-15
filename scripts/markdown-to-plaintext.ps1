@@ -37,9 +37,9 @@ process {
 
         $content = Get-Content -LiteralPath $file_in -Raw
 
-        # strip anchor link formatting
-        # "[foo bar](#foo-bar)" -> ""foo bar""
-        $content = $content -replace "\[(.*?)\]\(#.*?\)", "`"`$1`""
+        # replace anchor links with just the link text
+        # "[foo bar](#foo-bar)" -> "foo bar"
+        $content = $content -replace "\[(.*?)\]\(#.*?\)", "`$1"
         # remove any remaining '(TOC)' lines and an extra line
         # "$line_ending(TOC)$line_ending" -> ""
         $content = $content -replace "$line_ending\(TOC\)$line_ending", ""

@@ -51,9 +51,11 @@ process {
         $content = $content -replace "(.*)$line_ending={3,}", "[size=5][b]`$1[/b][/size]"
         # convert '...\n---' headers to '[size=4][b][u]...:[/u][/b][/size]'
         $content = $content -replace "(.*)$line_ending-{3,}", "[size=4][b][u]`$1:[/u][/b][/size]"
-        # remove anchor links
+        # replace anchor links with just the link text
+        # "[foo bar](#foo-bar)" -> "foo bar"
         $content = $content -replace "\[(.*?)\]\(#.*?\)", "`$1"
-        # remove any remaining '(TOC)' lines and an extra newline
+        # remove any remaining '(TOC)' lines and an extra line
+        # "$line_ending(TOC)$line_ending" -> ""
         $content = $content -replace "$line_ending\(TOC\)$line_ending", ""
         # remove '<details><summary>...</summary>' and '</details>' and extra newline on each
         $content = $content -replace "$line_ending<details>.*?</summary>$line_ending", ""
