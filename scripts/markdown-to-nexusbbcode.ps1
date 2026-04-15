@@ -64,6 +64,10 @@ process {
         # convert '*...*' and '_..._' to '[i]...[/i]'
         $content = $content -replace "(?<=^|\W)(?<!>)(?<!\\)\*(.+?)\*(?=\W)(?!\\<|<)", "[u]`$1[/u]"
         $content = $content -replace "(?<=^|\W)(?<!>)(?<!\\)_(.+?)_(?=\W)(?!\\<|<)", "[u]`$1[/u]"
+        # strip escape character when in front of "_", "*", "<", ">"
+        # "\_foo\_bar\_" -> "_foo_bar_"
+        # "\<foo\>\_bar\_\<baz\>" -> "<foo>_bar_<baz>"
+        $content = $content -replace "\\(_|\*|<|>)", "`$1"
         # convert '![...](... "...")' to '[img]...[/img]'
         $content = $content -replace "!\[(.*)\]\((.*) `".*`"\)", "[img]`$2[/img]"
         # convert '![...](...)' to '[img]...[/img]'
